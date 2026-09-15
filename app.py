@@ -88,10 +88,10 @@ def get_cached_playlist_from_text(text: str) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def get_cached_genres(df: pd.DataFrame) -> pd.Series:
+def get_cached_genres(_df: pd.DataFrame, dataset_fingerprint: str) -> pd.Series:
     classifier = GenreClassifier()
     clusters = []
-    for _, row in df.iterrows():
+    for _, row in _df.iterrows():
         cluster, _ = classifier.classify_track(
             artist_raw=row["artist_raw"],
             title_raw=row["title_raw"],
@@ -99,7 +99,7 @@ def get_cached_genres(df: pd.DataFrame) -> pd.Series:
             allow_network=False,
         )
         clusters.append(cluster)
-    return pd.Series(clusters, index=df.index)
+    return pd.Series(clusters, index=_df.index)
 
 
 def render_network_html(graph: nx.Graph, height_px: int = 650) -> str:
@@ -203,7 +203,8 @@ def main() -> None:
         df = df_raw.copy()
         df["time_order"] = df["id"]
 
-    df["genre_cluster"] = get_cached_genres(df)
+    dataset_fingerprint = f"{source_name}_{len(df)}"
+    df["genre_cluster"] = get_cached_genres(df, dataset_fingerprint)
 
     st.sidebar.markdown("---")
     st.sidebar.caption(f"📁 Источник: **{source_name}**")
