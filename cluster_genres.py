@@ -46,6 +46,12 @@ def write_m3u8_playlist(file_path: str, tracks: List[dict]) -> None:
             f.write(f"{tr['artist_raw']} - {tr['title_raw']}.mp3\n")
 
 
+def write_yandex_playlist(file_path: str, tracks: List[dict]) -> None:
+    with open(file_path, "w", encoding="utf-8") as f:
+        for tr in tracks:
+            f.write(f"{tr['artist_raw']} - {tr['title_raw']}\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Автоматическая сортировка и кластеризация треков по жанрам."
@@ -166,16 +172,19 @@ def main() -> None:
         base_name = CLUSTER_FILE_NAMES.get(cluster_name, "Плейлист_Прочее")
         txt_path = os.path.join(args.output_dir, f"{base_name}.txt")
         m3u8_path = os.path.join(args.output_dir, f"{base_name}.m3u8")
+        yandex_path = os.path.join(args.output_dir, f"{base_name}_yandex.txt")
 
         write_txt_playlist(txt_path, tracks)
         write_m3u8_playlist(m3u8_path, tracks)
+        write_yandex_playlist(yandex_path, tracks)
 
         total_sec = sum(t["duration_sec"] for t in tracks)
         pct = len(tracks) / len(df) * 100
 
         print(f"🎵 {cluster_name:<20}: {len(tracks):>5,} треков ({pct:>5.1f}%) | {format_seconds(total_sec)}")
-        print(f"   TXT : {os.path.basename(txt_path)}")
-        print(f"   M3U8: {os.path.basename(m3u8_path)}\n")
+        print(f"   TXT   : {os.path.basename(txt_path)}")
+        print(f"   M3U8  : {os.path.basename(m3u8_path)}")
+        print(f"   Yandex: {os.path.basename(yandex_path)}\n")
 
     print("Все плейлисты сохранены и готовы к использованию!")
 

@@ -1,5 +1,6 @@
 import os
 from typing import Dict, List, Optional
+import urllib.parse
 import networkx as nx
 import pandas as pd
 import plotly.express as px
@@ -190,7 +191,7 @@ def main() -> None:
     chrono_mode = st.sidebar.radio(
         "Порядок треков по времени:",
         (
-            "№1 = Самый недавний (стандарт VK)",
+            "№1 = Самый недавний (стандарт Яндекс Музыки)",
             "№1 = Самый первый (хронологический)",
         ),
         index=0,
@@ -208,11 +209,13 @@ def main() -> None:
 
     st.sidebar.markdown("---")
     st.sidebar.caption(f"📁 Источник: **{source_name}**")
+    st.sidebar.caption("🟡 Сервис: **Яндекс Музыка**")
+    st.sidebar.caption("👤 ID профиля: **965180470**")
     st.sidebar.caption(f"🎵 Всего треков: **{len(df):,}**")
 
     st.markdown('<div class="main-title">🎧 Анализ музыкального плейлиста</div>', unsafe_allow_html=True)
     st.markdown(
-        f'<div class="sub-title">Глубокая интерактивная аналитика для <b>{len(df):,}</b> треков и вашей музыкальной истории</div>',
+        f'<div class="sub-title">Глубокая интерактивная аналитика для <b>{len(df):,}</b> треков из <b>Яндекс Музыки</b></div>',
         unsafe_allow_html=True,
     )
 
@@ -446,6 +449,27 @@ def main() -> None:
                     key=f"dl_m3u8_{c_name}",
                 )
 
+                yandex_clean_content = "".join(
+                    f"{tr['artist_raw']} - {tr['title_raw']}\n"
+                    for tr in c_tracks.to_dict(orient="records")
+                )
+                st.download_button(
+                    label="🟡 Яндекс",
+                    data=yandex_clean_content,
+                    file_name=f"{file_base}_yandex.txt",
+                    mime="text/plain",
+                    help="Чистый список 'Артист - Трек' для быстрого импорта на music.yandex.ru/import",
+                    key=f"dl_ym_{c_name}",
+                )
+
+        st.info(
+            "💡 **Как создать эти плейлисты обратно в Яндекс Музыке:**\n\n"
+            "1. Нажмите кнопку **«🟡 Яндекс»** под любым жанром (скачается файл со списком без номеров и секунд).\n"
+            "2. Откройте официальную страницу: [music.yandex.ru/import](https://music.yandex.ru/import).\n"
+            "3. Перетащите скачанный файл или скопируйте текст — и нажмите **«Найти и сохранить»**!\n"
+            "Яндекс Музыка сопоставит песни со своим каталогом и сохранит новый плейлист в вашем профиле."
+        )
+
         st.markdown("---")
         st.markdown("#### 🔍 Исследование треков конкретного жанра")
         selected_genre = st.selectbox(
@@ -466,15 +490,27 @@ def main() -> None:
         st.dataframe(sub_top_artists, use_container_width=True, hide_index=True)
 
         st.markdown(f"**Список треков ({len(sub_df):,}):**")
+        sub_table_df = sub_df[["id", "artist_raw", "title_raw", "duration_fmt"]].copy().rename(
+            columns={
+                "id": "№",
+                "artist_raw": "Исполнитель",
+                "title_raw": "Название",
+                "duration_fmt": "Длительность",
+            }
+        )
+        sub_table_df["yandex_url"] = [
+            f"https://music.yandex.ru/search?text={urllib.parse.quote_plus(f'{a} {t}')}"
+            for a, t in zip(sub_df["artist_raw"], sub_df["title_raw"])
+        ]
         st.dataframe(
-            sub_df[["id", "artist_raw", "title_raw", "duration_fmt"]].rename(
-                columns={
-                    "id": "№",
-                    "artist_raw": "Исполнитель",
-                    "title_raw": "Название",
-                    "duration_fmt": "Длительность",
-                }
-            ),
+            sub_table_df,
+            column_config={
+                "yandex_url": st.column_config.LinkColumn(
+                    "Яндекс Музыка",
+                    display_text="Слушать ↗",
+                    help="Открыть трек в Яндекс Музыке",
+                )
+            },
             use_container_width=True,
             hide_index=True,
         )
@@ -773,7 +809,7 @@ def main() -> None:
         st.caption(f"Найдено треков: **{len(filtered_df):,}** из {len(df):,}")
 
         display_columns = ["id", "artist_raw", "title_raw", "genre_cluster", "duration_fmt", "is_collab"]
-        display_df = filtered_df[display_columns].rename(
+        display_df = filtered_df[display_columns].copy().rename(
             columns={
                 "id": "№",
                 "artist_raw": "Исполнитель",
@@ -783,9 +819,26 @@ def main() -> None:
                 "is_collab": "Фит?",
             }
         )
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        display_df["yandex_url"] = [
+            f"https://music.yandex.ru/search?text={urllib.parse.quote_plus(f'{a} {t}')}"
+            for a, t in zip(filtered_df["artist_raw"], filtered_df["title_raw"])
+        ]
 
-        csv_data = display_df.to_csv(index=False, encoding="utf-8-sig")
+        st.dataframe(
+            display_df,
+            column_config={
+                "yandex_url": st.column_config.LinkColumn(
+                    "Яндекс Музыка",
+                    display_text="Слушать ↗",
+                    help="Открыть трек в Яндекс Музыке",
+                )
+            },
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        csv_df = display_df.drop(columns=["yandex_url"], errors="ignore")
+        csv_data = csv_df.to_csv(index=False, encoding="utf-8-sig")
         st.download_button(
             label="📥 Скачать найденные треки в CSV",
             data=csv_data,
