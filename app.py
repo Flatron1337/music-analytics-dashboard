@@ -28,6 +28,8 @@ from yandex_api import (
     create_remote_playlist,
     fetch_user_likes_df,
     login_yandex,
+    poll_yandex_device_token,
+    request_yandex_device_code,
 )
 
 DEFAULT_FILE_PATH = os.path.join(
@@ -186,36 +188,69 @@ def main() -> None:
     if source_mode == "🟡 Яндекс Музыка (Live API)":
         st.sidebar.markdown("---")
         if not has_active_yandex:
-            st.sidebar.markdown("#### 🔑 Вход через Яндекс ID")
-            st.sidebar.markdown(
-                """
-                1. [👉 Получить токен в 1 клик](https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabb9db88b4186bb50c8abb14b6fe1)
-                2. Нажмите **«Разрешить»** в окне Яндекса.
-                3. Скопируйте полученный токен (или адресную строку) и вставьте ниже:
-                """
-            )
-            token_input = st.sidebar.text_input(
-                "Токен или URL перенаправления:",
-                type="password",
-                placeholder="y0_AgAAAA... или https://music.yandex.ru/#...",
-                help="Токен хранится только в памяти вашей сессии браузера.",
-            )
-            if st.sidebar.button("Войти в Яндекс Музыку", type="primary", use_container_width=True):
-                if token_input.strip():
-                    with st.sidebar.status("Проверка авторизации..."):
-                        client, user_info, err = login_yandex(token_input.strip())
-                    if err:
-                        st.sidebar.error(err)
+            st.sidebar.markdown("#### 🔑 Вход в Яндекс ID")
+            st.sidebar.write("Самый простой и безопасный способ — авторизация по коду:")
+
+            if "device_auth_data" not in st.session_state:
+                if st.sidebar.button("📱 Получить код для ya.ru/device", type="primary", use_container_width=True):
+                    with st.sidebar.status("Запрос кода у Яндекса..."):
+                        d_data, d_err = request_yandex_device_code()
+                    if d_err:
+                        st.sidebar.error(d_err)
                     else:
-                        st.session_state["yandex_client"] = client
-                        st.session_state["yandex_user"] = user_info
-                        st.sidebar.success(f"Добро пожаловать, {user_info['full_name']}!")
+                        st.session_state["device_auth_data"] = d_data
                         st.rerun()
-                else:
-                    st.sidebar.warning("Пожалуйста, введите токен.")
+            else:
+                d_data = st.session_state["device_auth_data"]
+                st.sidebar.markdown(f"1. Перейдите по ссылке: **[ya.ru/device]({d_data['verification_url']})**")
+                st.sidebar.markdown("2. Введите этот код подтверждения:")
+                st.sidebar.code(d_data["user_code"], language="text")
+
+                col_chk, col_cancel = st.sidebar.columns(2)
+                if col_chk.button("✅ Я ввёл код", type="primary", use_container_width=True):
+                    with st.sidebar.status("Проверка авторизации..."):
+                        token, poll_err = poll_yandex_device_token(d_data["device_code"])
+                    if token:
+                        client, user_info, err = login_yandex(token)
+                        if err:
+                            st.sidebar.error(err)
+                        else:
+                            st.session_state["yandex_client"] = client
+                            st.session_state["yandex_user"] = user_info
+                            st.session_state.pop("device_auth_data", None)
+                            st.sidebar.success(f"Добро пожаловать, {user_info['full_name']}!")
+                            st.rerun()
+                    else:
+                        st.sidebar.warning(poll_err or "Код ещё не подтверждён на ya.ru/device.")
+
+                if col_cancel.button("Отмена", use_container_width=True):
+                    st.session_state.pop("device_auth_data", None)
+                    st.rerun()
+
+            with st.sidebar.expander("Или ввести OAuth-токен вручную"):
+                token_input = st.text_input(
+                    "Токен Яндекс ID:",
+                    type="password",
+                    placeholder="y0_AgAAAA...",
+                    key="manual_token_inp",
+                    help="Ваш персональный OAuth-токен, если он уже у вас есть.",
+                )
+                if st.button("Войти по токену", use_container_width=True):
+                    if token_input.strip():
+                        with st.status("Проверка токена..."):
+                            client, user_info, err = login_yandex(token_input.strip())
+                        if err:
+                            st.error(err)
+                        else:
+                            st.session_state["yandex_client"] = client
+                            st.session_state["yandex_user"] = user_info
+                            st.session_state.pop("device_auth_data", None)
+                            st.rerun()
+                    else:
+                        st.warning("Пожалуйста, введите токен.")
 
             if os.path.exists(DEFAULT_FILE_PATH):
-                st.info("💡 Войдите в свой Яндекс ID в боковой панели, чтобы загрузить свежие треки в реальном времени. Сейчас открыта сохраненная коллекция.")
+                st.info("💡 Войдите в свой Яндекс ID через кнопку выше, чтобы загрузить свежие треки в реальном времени. Сейчас открыта сохраненная коллекция.")
                 df_raw = get_cached_playlist_from_file(DEFAULT_FILE_PATH)
                 source_name = os.path.basename(DEFAULT_FILE_PATH)
         else:

@@ -33,6 +33,37 @@ def extract_token_from_string(raw: str) -> Optional[str]:
     return None
 
 
+def request_yandex_device_code() -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Запрашивает одноразовый код для официальной авторизации через ya.ru/device (Device Flow)."""
+    try:
+        client = Client()
+        dc = client.request_device_code()
+        return {
+            "device_code": dc.device_code,
+            "user_code": dc.user_code,
+            "verification_url": dc.verification_url or "https://ya.ru/device",
+            "expires_in": dc.expires_in,
+            "interval": dc.interval,
+        }, None
+    except Exception as err:
+        return None, f"Не удалось получить код авторизации: {err}"
+
+
+def poll_yandex_device_token(device_code: str) -> Tuple[Optional[str], Optional[str]]:
+    """Проверяет подтверждение входа пользователем на ya.ru/device."""
+    try:
+        client = Client()
+        oauth_token = client.poll_device_token(device_code)
+        if oauth_token and oauth_token.access_token:
+            return oauth_token.access_token, None
+        return None, "Вход ещё не подтверждён на странице ya.ru/device. Введите код и нажмите «Проверить вход»."
+    except Exception as err:
+        err_msg = str(err)
+        if "authorization_pending" in err_msg:
+            return None, "Вход ещё не подтверждён на странице ya.ru/device. Введите код и нажмите «Проверить вход»."
+        return None, f"Ошибка при проверке кода: {err}"
+
+
 def login_yandex(
     token: str,
 ) -> Tuple[Optional[Client], Optional[Dict[str, Any]], Optional[str]]:
