@@ -24,6 +24,11 @@ from parser import (
     load_playlist,
     parse_playlist_text,
 )
+from yandex_api import (
+    create_remote_playlist,
+    fetch_user_likes_df,
+    login_yandex,
+)
 
 DEFAULT_FILE_PATH = os.path.join(
     os.path.dirname(__file__), "Мне нравится_965180470_20260915_213456.txt"
@@ -163,26 +168,120 @@ def render_network_html(graph: nx.Graph, height_px: int = 650) -> str:
 
 
 def main() -> None:
-    st.sidebar.title("🎛️ Параметры плейлиста")
+    st.sidebar.title("🎛️ Источник данных")
 
-    uploaded_file = st.sidebar.file_uploader(
-        "Загрузить файл плейлиста (.txt)",
-        type=["txt"],
-        help="Загрузите файл формата: <ID>. <Артист> - <Название> [<длительность>]",
+    has_active_yandex = "yandex_client" in st.session_state
+    default_source_idx = 0 if has_active_yandex else 1
+
+    source_mode = st.sidebar.radio(
+        "Режим работы:",
+        ("🟡 Яндекс Музыка (Live API)", "📁 Локальный файл (.txt)"),
+        index=default_source_idx,
     )
 
-    if uploaded_file is not None:
-        file_content = uploaded_file.getvalue().decode("utf-8", errors="replace")
-        df_raw = get_cached_playlist_from_text(file_content)
-        source_name = uploaded_file.name
-    elif os.path.exists(DEFAULT_FILE_PATH):
-        df_raw = get_cached_playlist_from_file(DEFAULT_FILE_PATH)
-        source_name = os.path.basename(DEFAULT_FILE_PATH)
+    df_raw = pd.DataFrame()
+    source_name = ""
+    account_uid_str = "965180470"
+
+    if source_mode == "🟡 Яндекс Музыка (Live API)":
+        st.sidebar.markdown("---")
+        if not has_active_yandex:
+            st.sidebar.markdown("#### 🔑 Вход через Яндекс ID")
+            st.sidebar.markdown(
+                """
+                1. [👉 Получить токен в 1 клик](https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabb9db88b4186bb50c8abb14b6fe1)
+                2. Нажмите **«Разрешить»** в окне Яндекса.
+                3. Скопируйте полученный токен (или адресную строку) и вставьте ниже:
+                """
+            )
+            token_input = st.sidebar.text_input(
+                "Токен или URL перенаправления:",
+                type="password",
+                placeholder="y0_AgAAAA... или https://music.yandex.ru/#...",
+                help="Токен хранится только в памяти вашей сессии браузера.",
+            )
+            if st.sidebar.button("Войти в Яндекс Музыку", type="primary", use_container_width=True):
+                if token_input.strip():
+                    with st.sidebar.status("Проверка авторизации..."):
+                        client, user_info, err = login_yandex(token_input.strip())
+                    if err:
+                        st.sidebar.error(err)
+                    else:
+                        st.session_state["yandex_client"] = client
+                        st.session_state["yandex_user"] = user_info
+                        st.sidebar.success(f"Добро пожаловать, {user_info['full_name']}!")
+                        st.rerun()
+                else:
+                    st.sidebar.warning("Пожалуйста, введите токен.")
+
+            if os.path.exists(DEFAULT_FILE_PATH):
+                st.info("💡 Войдите в свой Яндекс ID в боковой панели, чтобы загрузить свежие треки в реальном времени. Сейчас открыта сохраненная коллекция.")
+                df_raw = get_cached_playlist_from_file(DEFAULT_FILE_PATH)
+                source_name = os.path.basename(DEFAULT_FILE_PATH)
+        else:
+            user_info = st.session_state["yandex_user"]
+            client = st.session_state["yandex_client"]
+            account_uid_str = str(user_info.get("uid") or account_uid_str)
+
+            prof_col1, prof_col2 = st.sidebar.columns([1, 3])
+            with prof_col1:
+                if user_info.get("avatar_url"):
+                    st.image(user_info["avatar_url"], width=54)
+                else:
+                    st.markdown("🎧")
+            with prof_col2:
+                st.markdown(f"**{user_info['full_name']}**")
+                st.caption(f"ID: `{account_uid_str}` • 🟢 Онлайн")
+
+            col_btn_sync, col_btn_logout = st.sidebar.columns(2)
+            sync_btn = col_btn_sync.button("🔄 Обновить", help="Синхронизировать плейлист 'Мне нравится'", use_container_width=True)
+            if col_btn_logout.button("🚪 Выйти", help="Выйти из профиля", use_container_width=True):
+                st.session_state.pop("yandex_client", None)
+                st.session_state.pop("yandex_user", None)
+                st.session_state.pop("yandex_likes_df", None)
+                st.rerun()
+
+            if sync_btn or "yandex_likes_df" not in st.session_state:
+                prog_bar = st.sidebar.progress(0)
+                status_box = st.sidebar.empty()
+
+                def update_progress(cur: int, tot: int, text: str) -> None:
+                    prog_bar.progress(min(1.0, cur / max(1, tot)))
+                    status_box.caption(text)
+
+                with st.spinner("Загрузка треков из вашей Яндекс Музыки..."):
+                    df_loaded = fetch_user_likes_df(client, progress_callback=update_progress)
+                prog_bar.empty()
+                status_box.empty()
+
+                if not df_loaded.empty:
+                    st.session_state["yandex_likes_df"] = df_loaded
+                    st.sidebar.success(f"Синхронизировано: {len(df_loaded):,} треков!")
+
+            if "yandex_likes_df" in st.session_state:
+                df_raw = st.session_state["yandex_likes_df"]
+                source_name = f"Яндекс Музыка ({user_info['login']})"
+
     else:
-        st.error(
-            f"Файл по умолчанию не найден: {DEFAULT_FILE_PATH}. Пожалуйста, загрузите .txt файл через боковую панель."
+        st.sidebar.markdown("---")
+        uploaded_file = st.sidebar.file_uploader(
+            "Загрузить файл плейлиста (.txt)",
+            type=["txt"],
+            help="Загрузите файл формата: <ID>. <Артист> - <Название> [<длительность>]",
         )
-        st.stop()
+
+        if uploaded_file is not None:
+            file_content = uploaded_file.getvalue().decode("utf-8", errors="replace")
+            df_raw = get_cached_playlist_from_text(file_content)
+            source_name = uploaded_file.name
+        elif os.path.exists(DEFAULT_FILE_PATH):
+            df_raw = get_cached_playlist_from_file(DEFAULT_FILE_PATH)
+            source_name = os.path.basename(DEFAULT_FILE_PATH)
+        else:
+            st.error(
+                f"Файл по умолчанию не найден: {DEFAULT_FILE_PATH}. Пожалуйста, загрузите .txt файл через боковую панель."
+            )
+            st.stop()
 
     if df_raw.empty:
         st.warning("В файле не найдено корректных записей треков.")
@@ -209,8 +308,8 @@ def main() -> None:
 
     st.sidebar.markdown("---")
     st.sidebar.caption(f"📁 Источник: **{source_name}**")
-    st.sidebar.caption("🟡 Сервис: **Яндекс Музыка**")
-    st.sidebar.caption("👤 ID профиля: **965180470**")
+    st.sidebar.caption(f"🟡 Сервис: **Яндекс Музыка** {'(Live API 🟢)' if has_active_yandex else ''}")
+    st.sidebar.caption(f"👤 ID профиля: **{account_uid_str}**")
     st.sidebar.caption(f"🎵 Всего треков: **{len(df):,}**")
 
     st.markdown('<div class="main-title">🎧 Анализ музыкального плейлиста</div>', unsafe_allow_html=True)
@@ -462,13 +561,41 @@ def main() -> None:
                     key=f"dl_ym_{c_name}",
                 )
 
-        st.info(
-            "💡 **Как создать эти плейлисты обратно в Яндекс Музыке:**\n\n"
-            "1. Нажмите кнопку **«🟡 Яндекс»** под любым жанром (скачается файл со списком без номеров и секунд).\n"
-            "2. Откройте официальную страницу: [music.yandex.ru/import](https://music.yandex.ru/import).\n"
-            "3. Перетащите скачанный файл или скопируйте текст — и нажмите **«Найти и сохранить»**!\n"
-            "Яндекс Музыка сопоставит песни со своим каталогом и сохранит новый плейлист в вашем профиле."
-        )
+                if "yandex_client" in st.session_state:
+                    has_cloud_ids = any(
+                        tr.get("track_id") and str(tr["track_id"]).isdigit()
+                        for tr in c_tracks.to_dict(orient="records")
+                    )
+                    if has_cloud_ids:
+                        if st.button(
+                            "🪄 В Яндекс",
+                            key=f"btn_cloud_{c_name}",
+                            help=f"Автоматически создать плейлист '{c_name}' в вашем аккаунте",
+                        ):
+                            with st.spinner(f"Создаем плейлист «{c_name}» в вашем аккаунте..."):
+                                ok, msg, pl_url = create_remote_playlist(
+                                    client=st.session_state["yandex_client"],
+                                    title=f"Моя Музыка: {c_name}",
+                                    tracks=c_tracks.to_dict(orient="records"),
+                                )
+                            if ok:
+                                st.success(msg)
+                                if pl_url:
+                                    st.markdown(f"[🔗 Открыть созданный плейлист]({pl_url})")
+                                st.balloons()
+                            else:
+                                st.error(msg)
+
+        if "yandex_client" in st.session_state:
+            st.success(
+                "✨ **Вы авторизованы через Яндекс ID!** Вы можете создать любой из этих плейлистов прямо в вашем аккаунте в 1 клик с помощью кнопки **«🪄 В Яндекс»**."
+            )
+        else:
+            st.info(
+                "💡 **Как создать эти плейлисты в Яндекс Музыке:**\n\n"
+                "1. **Автоматически в 1 клик:** подключите ваш Яндекс ID в боковой панели и нажмите кнопку **«🪄 В Яндекс»**.\n"
+                "2. **Вручную через импорт:** скачайте файл кнопкой **«🟡 Яндекс»** и вставьте на официальной странице [music.yandex.ru/import](https://music.yandex.ru/import)."
+            )
 
         st.markdown("---")
         st.markdown("#### 🔍 Исследование треков конкретного жанра")
@@ -808,10 +935,19 @@ def main() -> None:
 
         st.caption(f"Найдено треков: **{len(filtered_df):,}** из {len(df):,}")
 
-        display_columns = ["id", "artist_raw", "title_raw", "genre_cluster", "duration_fmt", "is_collab"]
+        has_covers = (
+            "cover_uri" in filtered_df.columns
+            and filtered_df["cover_uri"].astype(str).str.startswith("http").any()
+        )
+        display_columns = ["id"]
+        if has_covers:
+            display_columns.append("cover_uri")
+        display_columns += ["artist_raw", "title_raw", "genre_cluster", "duration_fmt", "is_collab"]
+
         display_df = filtered_df[display_columns].copy().rename(
             columns={
                 "id": "№",
+                "cover_uri": "Обложка",
                 "artist_raw": "Исполнитель",
                 "title_raw": "Название",
                 "genre_cluster": "Жанр",
@@ -824,15 +960,22 @@ def main() -> None:
             for a, t in zip(filtered_df["artist_raw"], filtered_df["title_raw"])
         ]
 
+        table_config: Dict[str, Any] = {
+            "yandex_url": st.column_config.LinkColumn(
+                "Яндекс Музыка",
+                display_text="Слушать ↗",
+                help="Открыть трек в Яндекс Музыке",
+            )
+        }
+        if has_covers:
+            table_config["Обложка"] = st.column_config.ImageColumn(
+                "Обложка",
+                help="Обложка альбома",
+            )
+
         st.dataframe(
             display_df,
-            column_config={
-                "yandex_url": st.column_config.LinkColumn(
-                    "Яндекс Музыка",
-                    display_text="Слушать ↗",
-                    help="Открыть трек в Яндекс Музыке",
-                )
-            },
+            column_config=table_config,
             use_container_width=True,
             hide_index=True,
         )
