@@ -181,7 +181,24 @@ class ProfileTab extends StatelessWidget {
                         children: [
                           Expanded(
                             child: FilledButton.icon(
-                              onPressed: () => authViewModel.openVerificationUrl(),
+                              onPressed: () async {
+                                if (authViewModel.userCode != null) {
+                                  Clipboard.setData(ClipboardData(text: authViewModel.userCode!));
+                                }
+                                final ok = await authViewModel.openVerificationUrl();
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        ok
+                                            ? 'Код ${authViewModel.userCode ?? ""} скопирован! Вставьте его на ya.ru/device'
+                                            : 'Не удалось запустить браузер. Откройте ya.ru/device и введите код: ${authViewModel.userCode ?? ""}',
+                                      ),
+                                      duration: const Duration(seconds: 4),
+                                    ),
+                                  );
+                                }
+                              },
                               icon: const Icon(Icons.open_in_browser_rounded),
                               label: const Text('Открыть ya.ru/device'),
                               style: FilledButton.styleFrom(

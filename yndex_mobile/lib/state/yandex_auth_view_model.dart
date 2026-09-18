@@ -151,11 +151,23 @@ class YandexAuthViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> openVerificationUrl() async {
+  Future<bool> openVerificationUrl() async {
     final url = _verificationUrl ?? 'https://ya.ru/device';
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        return await launchUrl(uri, mode: LaunchMode.platformDefault);
+      }
+      return true;
+    } catch (_) {
+      try {
+        return await launchUrl(uri, mode: LaunchMode.platformDefault);
+      } catch (e) {
+        _statusMessage = 'Не удалось открыть браузер. Перейдите на ya.ru/device вручную.';
+        notifyListeners();
+        return false;
+      }
     }
   }
 
