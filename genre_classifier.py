@@ -448,7 +448,9 @@ BUILTIN_ARTISTS: Dict[str, str] = {
 class GenreClassifier:
     def __init__(self, db_path: str = CACHE_DB_PATH) -> None:
         self.db_path = db_path
+        self._mem_cache: Dict[str, Tuple[str, List[str]]] = {}
         self._init_db()
+        self._load_memory_cache()
 
     def _init_db(self) -> None:
         with sqlite3.connect(self.db_path, timeout=30.0) as conn:
@@ -468,19 +470,21 @@ class GenreClassifier:
             )
             conn.commit()
 
+    def _load_memory_cache(self) -> None:
+        try:
+            with sqlite3.connect(self.db_path, timeout=30.0) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT artist_key, cluster, tags_json FROM artist_cache")
+                for key, cluster, tags_json in cursor.fetchall():
+                    tags = json.loads(tags_json) if tags_json else []
+                    self._mem_cache[key] = (cluster, tags)
+        except Exception:
+            pass
+
     def get_cached_artist(self, artist_name: str) -> Optional[Tuple[str, List[str]]]:
         key = artist_name.strip().lower()
-        with sqlite3.connect(self.db_path, timeout=30.0) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT cluster, tags_json FROM artist_cache WHERE artist_key = ?",
-                (key,),
-            )
-            row = cursor.fetchone()
-            if row:
-                cluster, tags_json = row
-                tags = json.loads(tags_json) if tags_json else []
-                return cluster, tags
+        if key in self._mem_cache:
+            return self._mem_cache[key]
         return None
 
     def save_cached_artist(
@@ -491,6 +495,7 @@ class GenreClassifier:
         source: str = "api",
     ) -> None:
         key = artist_name.strip().lower()
+        self._mem_cache[key] = (cluster, tags)
         with sqlite3.connect(self.db_path, timeout=30.0) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -501,6 +506,7 @@ class GenreClassifier:
                 (key, artist_name.strip(), cluster, json.dumps(tags, ensure_ascii=False), source),
             )
             conn.commit()
+
 
     def save_cached_artists_batch(self, batch: List[Tuple[str, str, List[str], str]]) -> None:
         if not batch:

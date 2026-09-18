@@ -67,29 +67,37 @@ def get_dataset() -> pd.DataFrame:
         _df_cache = df
         return _df_cache
 
-    # Classify genres using fast cached classify_track
-    genres: List[str] = []
-    for _, row in df.iterrows():
-        cluster, _ = _classifier.classify_track(
-            artist_raw=row.get("artist_raw", ""),
-            title_raw=row.get("title_raw", ""),
-            all_artists=row.get("all_artists", []),
+    # High-speed in-memory classification using zip
+    artists_raw = df["artist_raw"].tolist()
+    titles_raw = df["title_raw"].tolist()
+    all_artists_list = df["all_artists"].tolist()
+    genres = [
+        _classifier.classify_track(
+            artist_raw=a,
+            title_raw=t,
+            all_artists=aa,
             allow_network=False,
-        )
-        genres.append(cluster)
+        )[0]
+        for a, t, aa in zip(artists_raw, titles_raw, all_artists_list)
+    ]
 
     df["genre_cluster"] = genres
     _df_cache = df
     return _df_cache
 
 
+# Pre-warm dataset in a background daemon thread
+import threading
+threading.Thread(target=get_dataset, daemon=True).start()
+
+
 @app.route("/", methods=["GET"])
 def index():
-    df = get_dataset()
     return jsonify({
         "service": "Music Analytics REST API (Yandex Music)",
         "status": "online",
-        "tracks_loaded": len(df),
+        "tracks_loaded": len(_df_cache) if _df_cache is not None else 0,
+        "is_ready": _df_cache is not None,
         "endpoints": [
             "/api/health",
             "/api/overview",
@@ -105,12 +113,13 @@ def index():
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    df = get_dataset()
     return jsonify({
         "status": "ok",
-        "tracks_loaded": len(df),
-        "service": "Music Analytics REST API"
+        "service": "Music Analytics REST API",
+        "tracks_loaded": len(_df_cache) if _df_cache is not None else 0,
+        "is_ready": _df_cache is not None,
     })
+
 
 
 @app.route("/api/overview", methods=["GET"])
