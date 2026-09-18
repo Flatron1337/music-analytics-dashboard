@@ -6,3 +6,5 @@ pyvis>=0.3.2
 yandex-music>=3.0.0
 flask>=3.0.0
 flask-cors>=4.0.0
+aiohttp>=3.9.0
+
