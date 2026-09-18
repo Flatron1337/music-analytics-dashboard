@@ -32,7 +32,7 @@ def start_subprocesses() -> None:
 
     python_executable = sys.executable
 
-    print(f"[*] Запуск Streamlit (Веб-версия) на порту {STREAMLIT_PORT}...")
+    print(f"[*] Запуск Streamlit (Веб-версия) на порту {STREAMLIT_PORT}...", flush=True)
     streamlit_cmd = [
         python_executable,
         "-m",
@@ -46,16 +46,17 @@ def start_subprocesses() -> None:
     ]
     streamlit_process = subprocess.Popen(streamlit_cmd)
 
-    print(f"[*] Запуск REST API (Мобильный бэкенд) на порту {FLASK_API_PORT}...")
+    print(f"[*] Запуск REST API (Мобильный бэкенд) на порту {FLASK_API_PORT}...", flush=True)
     flask_env = os.environ.copy()
     flask_env["PORT"] = str(FLASK_API_PORT)
+    flask_env["FLASK_HOST"] = "127.0.0.1"
     flask_cmd = [python_executable, "-u", "api.py"]
     flask_process = subprocess.Popen(flask_cmd, env=flask_env)
 
 
 def stop_subprocesses() -> None:
     global streamlit_process, flask_process
-    print("\n[*] Завершение внутренних процессов...")
+    print("\n[*] Завершение внутренних процессов...", flush=True)
 
     if streamlit_process:
         try:
@@ -63,7 +64,7 @@ def stop_subprocesses() -> None:
             streamlit_process.wait(timeout=3)
         except Exception:
             streamlit_process.kill()
-        print("[+] Процесс Streamlit остановлен.")
+        print("[+] Процесс Streamlit остановлен.", flush=True)
 
     if flask_process:
         try:
@@ -71,7 +72,8 @@ def stop_subprocesses() -> None:
             flask_process.wait(timeout=3)
         except Exception:
             flask_process.kill()
-        print("[+] Процесс REST API остановлен.")
+        print("[+] Процесс REST API остановлен.", flush=True)
+
 
 
 async def proxy_websocket(request: web.Request, target_ws_url: str) -> web.WebSocketResponse:
@@ -139,6 +141,8 @@ async def proxy_http_request(request: web.Request, target_base_url: str) -> web.
     target_url = f"{target_base_url}{url_suffix}"
 
     body = await request.read()
+    req_data = body if (request.method not in ("GET", "HEAD") and len(body) > 0) else None
+
     headers = {
         k: v
         for k, v in request.headers.items()
@@ -155,7 +159,7 @@ async def proxy_http_request(request: web.Request, target_base_url: str) -> web.
                     method=request.method,
                     url=target_url,
                     headers=headers,
-                    data=body,
+                    data=req_data,
                     allow_redirects=False,
                     timeout=aiohttp.ClientTimeout(total=45),
                 ) as upstream_response:
@@ -166,6 +170,7 @@ async def proxy_http_request(request: web.Request, target_base_url: str) -> web.
                         if k.lower() not in HOP_BY_HOP_HEADERS:
                             response_headers[k] = v
 
+                    print(f"[{request.method}] {request.path_qs} -> Upstream ({upstream_response.status})", flush=True)
                     return web.Response(
                         body=content,
                         status=upstream_response.status,
@@ -182,6 +187,7 @@ async def proxy_http_request(request: web.Request, target_base_url: str) -> web.
                 charset="utf-8",
             )
         except Exception as e:
+            print(f"[!] Ошибка проксирования {target_url}: {e}", flush=True)
             return web.Response(
                 text=f"Ошибка проксирования: {e}",
                 status=502,
@@ -221,13 +227,13 @@ def main():
     start_subprocesses()
 
     port = int(os.environ.get("PORT", 10000))
-    print("=" * 65)
-    print(" 🚀 MUSIC ANALYTICS UNIFIED ROUTER (WEB + MOBILE)")
-    print("=" * 65)
-    print(f" 🌐 Внешний порт:       http://0.0.0.0:{port}")
-    print(" 💻 Веб-сайт (Streamlit): http://localhost:8501 (по корню '/')")
-    print(" 📱 Mobile API (Flask):   http://localhost:5001 (по пути '/api/')")
-    print("=" * 65)
+    print("=" * 65, flush=True)
+    print(" 🚀 MUSIC ANALYTICS UNIFIED ROUTER (WEB + MOBILE)", flush=True)
+    print("=" * 65, flush=True)
+    print(f" 🌐 Внешний порт:         http://0.0.0.0:{port}", flush=True)
+    print(" 💻 Веб-сайт (Streamlit): http://127.0.0.1:8501 (по корню '/')", flush=True)
+    print(" 📱 Mobile API (Flask):   http://127.0.0.1:5001 (по пути '/api/')", flush=True)
+    print("=" * 65, flush=True)
 
     app = init_app()
 
@@ -242,7 +248,7 @@ def main():
         pass
 
     try:
-        web.run_app(app, host="0.0.0.0", port=port, print=None)
+        web.run_app(app, host="0.0.0.0", port=port)
     finally:
         stop_subprocesses()
 

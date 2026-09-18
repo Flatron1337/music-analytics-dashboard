@@ -3,5 +3,11 @@ services:
     name: music-analytics-dashboard
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    startCommand: python -u main.py
     plan: free
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PYTHONUNBUFFERED
+        value: "1"
+

@@ -332,9 +332,11 @@ def sync_likes():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
-    print("=" * 60)
-    print(" 🚀 MUSIC ANALYTICS FLUTTER REST API")
-    print(f" 🌐 Локально:    http://localhost:{port}")
-    print(f" 📱 Для Android: http://10.0.2.2:{port} (эмулятор) или локальный Wi-Fi IP")
-    print("=" * 60)
-    app.run(host="0.0.0.0", port=port, debug=False)
+    host = os.environ.get("FLASK_HOST", "127.0.0.1")
+    print("=" * 60, flush=True)
+    print(" 🚀 MUSIC ANALYTICS FLUTTER REST API", flush=True)
+    print(f" 🌐 Локально:    http://{host}:{port}", flush=True)
+    print(f" 📱 Для Android: http://10.0.2.2:{port} (эмулятор) или локальный Wi-Fi IP", flush=True)
+    print("=" * 60, flush=True)
+    app.run(host=host, port=port, debug=False)
+
