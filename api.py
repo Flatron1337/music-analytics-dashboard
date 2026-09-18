@@ -144,6 +144,17 @@ def get_overview():
         for artist, count in artist_counts.head(15).items()
     ]
 
+    if "artists_count" not in df.columns:
+        if "all_artists" in df.columns:
+            df["artists_count"] = df["all_artists"].apply(lambda a: len(a) if isinstance(a, list) else 1)
+        elif "is_collab" in df.columns:
+            df["artists_count"] = df["is_collab"].apply(lambda c: 2 if c else 1)
+        else:
+            df["artists_count"] = 1
+
+    if "is_collab" not in df.columns:
+        df["is_collab"] = df["artists_count"] > 1
+
     solo_count = int((df["artists_count"] == 1).sum())
     collab_count = int((df["artists_count"] > 1).sum())
     collab_ratio = round((collab_count / total_tracks) * 100, 1) if total_tracks > 0 else 0.0
@@ -192,7 +203,7 @@ def get_timeline():
         return jsonify({"segments": []})
 
     total = len(df)
-    num_segments = 8
+    num_segments = min(8, max(1, total))
     segment_size = max(1, total // num_segments)
     segments: List[Dict[str, Any]] = []
 
@@ -275,6 +286,7 @@ def get_tracks():
             "genre": row.get("genre_cluster", CLUSTER_OTHER),
             "genre_color": CLUSTER_COLORS.get(row.get("genre_cluster", ""), "#FFFFFF"),
             "is_collab": bool(row.get("is_collab", False)),
+            "cover_uri": row.get("cover_uri", ""),
             "yandex_url": yandex_url,
         })
 
@@ -357,6 +369,14 @@ def sync_likes():
         )[0]
         for a, t, aa in zip(artists_raw, titles_raw, all_artists_list)
     ]
+
+    if "artists_count" not in likes_df.columns:
+        if "all_artists" in likes_df.columns:
+            likes_df["artists_count"] = likes_df["all_artists"].apply(lambda a: len(a) if isinstance(a, list) else 1)
+        else:
+            likes_df["artists_count"] = 1
+    if "is_collab" not in likes_df.columns:
+        likes_df["is_collab"] = likes_df["artists_count"] > 1
 
     likes_df["genre_cluster"] = genres
     _df_cache = likes_df
