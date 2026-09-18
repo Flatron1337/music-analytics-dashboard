@@ -289,10 +289,17 @@ def get_tracks():
 
 @app.route("/api/auth/device-code", methods=["POST"])
 def auth_device_code():
-    res = yandex_api.request_yandex_device_code()
-    if res.get("success"):
-        return jsonify(res)
-    return jsonify(res), 400
+    data, err = yandex_api.request_yandex_device_code()
+    if err or not data:
+        return jsonify({"success": False, "error": err or "Failed to get device code"}), 400
+    return jsonify({
+        "success": True,
+        "device_code": data["device_code"],
+        "user_code": data["user_code"],
+        "verification_url": data.get("verification_url", "https://ya.ru/device"),
+        "expires_in": data.get("expires_in", 300),
+        "interval": data.get("interval", 5),
+    })
 
 
 @app.route("/api/auth/poll-token", methods=["POST"])
@@ -300,10 +307,21 @@ def auth_poll_token():
     data = request.get_json(silent=True) or {}
     device_code = data.get("device_code", "").strip()
     if not device_code:
-        return jsonify({"success": False, "error": "device_code is required"}), 400
+        return jsonify({"status": "error", "message": "device_code is required"}), 400
 
-    res = yandex_api.poll_yandex_device_token(device_code)
-    return jsonify(res)
+    token, err = yandex_api.poll_yandex_device_token(device_code)
+    if token:
+        return jsonify({"status": "success", "token": token})
+
+    if err:
+        err_lower = err.lower()
+        if "authorization_pending" in err_lower or "ещё не подтверждён" in err_lower or "не подтвержден" in err_lower:
+            return jsonify({"status": "authorization_pending"})
+        if "slow_down" in err_lower:
+            return jsonify({"status": "slow_down"})
+        return jsonify({"status": "error", "message": err})
+
+    return jsonify({"status": "authorization_pending"})
 
 
 @app.route("/api/sync-likes", methods=["POST"])
@@ -314,20 +332,31 @@ def sync_likes():
     if not token:
         return jsonify({"success": False, "error": "token is required"}), 400
 
-    likes_df, err = yandex_api.fetch_user_likes_df(token)
-    if err:
-        return jsonify({"success": False, "error": err}), 400
+    client, user_info, err = yandex_api.login_yandex(token)
+    if err or not client:
+        return jsonify({"success": False, "error": err or "Invalid token"}), 400
 
-    # Classify fresh tracks using cached classifier
-    genres: List[str] = []
-    for _, row in likes_df.iterrows():
-        cluster, _ = _classifier.classify_track(
-            artist_raw=row.get("artist_raw", ""),
-            title_raw=row.get("title_raw", ""),
-            all_artists=row.get("all_artists", []),
+    try:
+        likes_df = yandex_api.fetch_user_likes_df(client)
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Ошибка загрузки треков: {e}"}), 500
+
+    if likes_df is None or likes_df.empty:
+        return jsonify({"success": False, "error": "Не удалось загрузить треки или плейлист пуст"}), 400
+
+    # High-speed in-memory classification using zip
+    artists_raw = likes_df["artist_raw"].tolist()
+    titles_raw = likes_df["title_raw"].tolist()
+    all_artists_list = likes_df["all_artists"].tolist()
+    genres = [
+        _classifier.classify_track(
+            artist_raw=a,
+            title_raw=t,
+            all_artists=aa,
             allow_network=False,
-        )
-        genres.append(cluster)
+        )[0]
+        for a, t, aa in zip(artists_raw, titles_raw, all_artists_list)
+    ]
 
     likes_df["genre_cluster"] = genres
     _df_cache = likes_df
@@ -337,6 +366,7 @@ def sync_likes():
         "tracks_synced": len(likes_df),
         "message": f"Синхронизировано {len(likes_df)} треков из Яндекс Музыки!"
     })
+
 
 
 if __name__ == "__main__":
