@@ -24,4 +24,5 @@ class ApiConstants {
   static const String endpointPollToken = '/api/auth/poll-token';
   static const String endpointSyncLikes = '/api/sync-likes';
   static const String endpointExportPlaylist = '/api/export-playlist';
+  static const String endpointArtist = '/api/artist';
 }

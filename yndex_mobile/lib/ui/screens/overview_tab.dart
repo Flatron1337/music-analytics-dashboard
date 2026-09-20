@@ -4,6 +4,8 @@ import '../../core/utils/formatters.dart';
 import '../../state/app_view_model.dart';
 import '../widgets/metric_card.dart';
 import '../widgets/skeleton_loader.dart';
+import '../widgets/story_preview_dialog.dart';
+import 'artist_detail_screen.dart';
 
 class OverviewTab extends StatelessWidget {
   final AppViewModel viewModel;
@@ -96,7 +98,50 @@ class OverviewTab extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+
+          // Social Story Banner Card
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => StoryPreviewDialog.show(context, stats: stats, clusters: viewModel.genres),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF2E1A47), Color(0xFF1E222D)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.neonPurple.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.neonPurple.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.auto_awesome, color: AppColors.neonPurple, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Твоя Музыкальная Story 📸', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white)),
+                        SizedBox(height: 2),
+                        Text('Сгенерировать карточку для соцсетей (9:16)', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.neonPurple),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
 
           // Primary 2x2 Grid
           GridView.count(
@@ -219,14 +264,23 @@ class OverviewTab extends StatelessWidget {
               final maxCount = stats.topArtists.isNotEmpty ? stats.topArtists.first.count : 1;
               final ratio = artist.count / maxCount;
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.5)),
-                ),
+              return InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  ArtistDetailScreen.navigate(
+                    context,
+                    artist.artist,
+                    viewModel.repository.apiService,
+                  );
+                },
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.5)),
+                  ),
                 child: Column(
                   children: [
                     Row(
@@ -285,6 +339,7 @@ class OverviewTab extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
                 ),
               );
             },

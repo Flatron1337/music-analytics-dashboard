@@ -232,7 +232,10 @@ class _TracksTabState extends State<TracksTab> {
                       itemCount: vm.tracks.length,
                       itemBuilder: (context, index) {
                         final track = vm.tracks[index];
-                        return TrackTile(track: track);
+                        return TrackTile(
+                          track: track,
+                          apiService: vm.repository.apiService,
+                        );
                       },
                     ),
         ),

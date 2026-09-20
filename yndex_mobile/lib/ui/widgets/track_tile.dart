@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/track_item.dart';
+import '../../data/services/api_service.dart';
+import '../screens/artist_detail_screen.dart';
 
 class TrackTile extends StatelessWidget {
   final TrackItem track;
+  final ApiService? apiService;
 
-  const TrackTile({super.key, required this.track});
+  const TrackTile({super.key, required this.track, this.apiService});
 
   Future<void> _openYandexMusic(BuildContext context) async {
     if (track.yandexUrl.isEmpty) return;
@@ -40,6 +43,13 @@ class TrackTile extends StatelessWidget {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        onTap: () {
+          if (apiService != null) {
+            ArtistDetailScreen.navigate(context, track.artist, apiService!);
+          } else {
+            _openYandexMusic(context);
+          }
+        },
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: Container(

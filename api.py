@@ -122,6 +122,7 @@ def index():
             "/api/auth/poll-token",
             "/api/sync-likes",
             "/api/export-playlist",
+            "/api/artist",
         ],
     })
 
@@ -443,7 +444,12 @@ def export_playlist():
     preset = data.get("preset", "genre").strip().lower()
     genre = data.get("genre", "").strip()
     custom_title = data.get("title", "").strip()
-    limit = max(1, min(300, int(data.get("limit", 100))))
+    
+    limit_raw = data.get("limit", 100)
+    try:
+        limit_val = int(limit_raw)
+    except (ValueError, TypeError):
+        limit_val = 100
 
     # 1. Проверяем авторизацию пользователя
     client, user_info, err = yandex_api.login_yandex(token)
@@ -506,7 +512,12 @@ def export_playlist():
     if filtered.empty:
         return jsonify({"success": False, "error": "По выбранному фильтру не найдено подходящих треков"}), 404
 
-    subset = filtered.head(limit)
+    # Если limit_val <= 0, экспортируем всю выборку целиком (без лимита)
+    if limit_val > 0:
+        subset = filtered.head(limit_val)
+    else:
+        subset = filtered
+
     final_title = custom_title if custom_title else default_title
 
     # 4. Подготавливаем структуру треков для yandex_api.create_remote_playlist
@@ -528,6 +539,126 @@ def export_playlist():
         "playlist_title": final_title,
         "playlist_url": url,
         "tracks_count": len(track_dicts),
+    })
+
+
+@app.route("/api/artist", methods=["GET"])
+def get_artist():
+    artist_name = request.args.get("name", "").strip()
+    if not artist_name:
+        return jsonify({"error": "Параметр 'name' обязателен"}), 400
+
+    df = get_dataset()
+    if df.empty:
+        return jsonify({"error": "Медиатека пуста"}), 404
+
+    target_lower = artist_name.lower()
+
+    def is_artist_match(row):
+        artists = row.get("all_artists")
+        if isinstance(artists, list):
+            if any(a.lower() == target_lower for a in artists):
+                return True
+        pri = str(row.get("primary_artist", "")).lower()
+        if pri == target_lower:
+            return True
+        raw = str(row.get("artist_raw", "")).lower()
+        return raw == target_lower
+
+    matched_df = df[df.apply(is_artist_match, axis=1)]
+    if matched_df.empty:
+        return jsonify({"error": f"Артист '{artist_name}' не найден в медиатеке"}), 404
+
+    total_matched = len(matched_df)
+    total_library = len(df)
+    library_share_pct = round((total_matched / total_library) * 100, 2) if total_library > 0 else 0.0
+
+    total_dur_sec = int(matched_df["duration_sec"].sum())
+    total_dur_fmt = format_seconds(total_dur_sec)
+    avg_dur_sec = int(matched_df["duration_sec"].mean()) if total_matched > 0 else 0
+
+    solo_count = int((~matched_df["is_collab"]).sum())
+    collab_count = int(matched_df["is_collab"].sum())
+
+    genre_counts = matched_df["genre_cluster"].value_counts().to_dict()
+    dominant_genre = max(genre_counts, key=genre_counts.get) if genre_counts else "Unknown"
+
+    genres_breakdown = [
+        {
+            "genre": g,
+            "count": int(c),
+            "percent": round((c / total_matched) * 100, 1),
+            "color": CLUSTER_COLORS.get(g, "#FFFFFF"),
+        }
+        for g, c in genre_counts.items()
+    ]
+
+    # Коллабораторы
+    collab_dict = {}
+    for artists in matched_df["all_artists"]:
+        if isinstance(artists, list):
+            for a in artists:
+                if a.lower() != target_lower:
+                    collab_dict[a] = collab_dict.get(a, 0) + 1
+
+    top_collabs = sorted(
+        [{"artist": a, "count": c} for a, c in collab_dict.items()],
+        key=lambda x: x["count"],
+        reverse=True
+    )[:12]
+
+    # Общий ранг артиста в библиотеке
+    all_artists_flat = []
+    for artists in df["all_artists"]:
+        if isinstance(artists, list):
+            all_artists_flat.extend(artists)
+    rank_series = pd.Series(all_artists_flat).value_counts()
+    rank = None
+    for idx, (art, _) in enumerate(rank_series.items()):
+        if art.lower() == target_lower:
+            rank = idx + 1
+            break
+
+    # Список треков артиста
+    tracks = []
+    for _, row in matched_df.iterrows():
+        title = row.get("title_raw", "")
+        artist = row.get("artist_raw", "")
+        yandex_url = row.get("yandex_url") or f"https://music.yandex.ru/search?text={urllib.parse.quote_plus(artist + ' - ' + title)}"
+        tracks.append({
+            "id": int(row.get("id", 0)),
+            "title": title,
+            "artist": artist,
+            "artists": row.get("all_artists", []),
+            "duration_sec": int(row.get("duration_sec", 0)),
+            "duration_fmt": row.get("duration_fmt", "0:00"),
+            "genre": row.get("genre_cluster", CLUSTER_OTHER),
+            "genre_color": CLUSTER_COLORS.get(row.get("genre_cluster", ""), "#FFFFFF"),
+            "is_collab": bool(row.get("is_collab", False)),
+            "cover_uri": row.get("cover_uri", ""),
+            "yandex_url": yandex_url,
+        })
+
+    canonical_name = matched_df.iloc[0]["primary_artist"] if target_lower == matched_df.iloc[0]["primary_artist"].lower() else artist_name
+    encoded_artist_query = urllib.parse.quote_plus(canonical_name)
+    artist_yandex_url = f"https://music.yandex.ru/search?text={encoded_artist_query}&type=artists"
+
+    return jsonify({
+        "artist": canonical_name,
+        "rank": rank,
+        "total_tracks": total_matched,
+        "library_share_percent": library_share_pct,
+        "total_duration_sec": total_dur_sec,
+        "total_duration_fmt": total_dur_fmt,
+        "avg_duration_sec": avg_dur_sec,
+        "solo_count": solo_count,
+        "collab_count": collab_count,
+        "dominant_genre": dominant_genre,
+        "dominant_color": CLUSTER_COLORS.get(dominant_genre, "#FFCC00"),
+        "genres": genres_breakdown,
+        "top_collaborators": top_collabs,
+        "tracks": tracks,
+        "yandex_url": artist_yandex_url,
     })
 
 

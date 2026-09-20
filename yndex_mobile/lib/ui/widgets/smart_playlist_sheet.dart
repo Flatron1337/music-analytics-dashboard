@@ -464,27 +464,38 @@ class _SmartPlaylistSheetState extends State<SmartPlaylistSheet> {
                     'Количество треков:',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                   ),
-                  Row(
-                    children: [50, 100, 200].map((count) {
-                      final isSelected = _limit == count;
-                      return Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: ChoiceChip(
-                          selected: isSelected,
-                          onSelected: (val) {
-                            if (val) setState(() => _limit = count);
-                          },
-                          label: Text('$count'),
-                          selectedColor: AppColors.yandexAmber,
-                          backgroundColor: AppColors.surface,
-                          labelStyle: TextStyle(
-                            color: isSelected ? Colors.black : Colors.white,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            fontSize: 12,
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        {'label': '50', 'val': 50},
+                        {'label': '100', 'val': 100},
+                        {'label': '200', 'val': 200},
+                        {'label': '500', 'val': 500},
+                        {'label': 'Все ♾️', 'val': 0},
+                      ].map((item) {
+                        final count = item['val'] as int;
+                        final label = item['label'] as String;
+                        final isSelected = _limit == count;
+                        return Padding(
+                          padding: const EdgeInsets.only(left: 6),
+                          child: ChoiceChip(
+                            selected: isSelected,
+                            onSelected: (val) {
+                              if (val) setState(() => _limit = count);
+                            },
+                            label: Text(label),
+                            selectedColor: AppColors.yandexAmber,
+                            backgroundColor: AppColors.surface,
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.black : Colors.white,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
-                      );
-                    }).toList(),
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ],
               ),

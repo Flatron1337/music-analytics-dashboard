@@ -9,6 +9,7 @@ import '../models/overview_stats.dart';
 import '../models/genre_cluster.dart';
 import '../models/track_item.dart';
 import '../models/timeline_point.dart';
+import '../models/artist_details.dart';
 
 class ApiService {
   String? _customBaseUrl;
@@ -218,6 +219,24 @@ class ApiService {
       return data;
     } else {
       throw Exception(data['error'] ?? 'Не удалось экспортировать плейлист');
+    }
+  }
+
+  Future<ArtistDetails> fetchArtistDetails(String name) async {
+    final host = await baseUrl;
+    final uri = Uri.parse('$host${ApiConstants.endpointArtist}').replace(queryParameters: {'name': name});
+    final response = await http.get(uri).timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      return ArtistDetails.fromJson(data);
+    } else {
+      try {
+        final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        throw Exception(data['error'] ?? 'Ошибка загрузки артиста');
+      } catch (_) {
+        throw Exception('Ошибка загрузки данных артиста (${response.statusCode})');
+      }
     }
   }
 }
