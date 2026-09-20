@@ -10,6 +10,7 @@ class TrackItem {
   final String genre;
   final String genreColorHex;
   final bool isCollab;
+  final String coverUri;
   final String yandexUrl;
 
   TrackItem({
@@ -22,6 +23,7 @@ class TrackItem {
     required this.genre,
     required this.genreColorHex,
     required this.isCollab,
+    required this.coverUri,
     required this.yandexUrl,
   });
 
@@ -46,6 +48,7 @@ class TrackItem {
       genre: json['genre'] as String? ?? 'Other',
       genreColorHex: json['genre_color'] as String? ?? '#FFCC00',
       isCollab: json['is_collab'] as bool? ?? false,
+      coverUri: json['cover_uri'] as String? ?? '',
       yandexUrl: json['yandex_url'] as String? ?? '',
     );
   }

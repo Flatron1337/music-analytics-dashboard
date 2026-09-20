@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yndex_mobile/data/models/genre_cluster.dart';
 import 'package:yndex_mobile/data/models/overview_stats.dart';
+import 'package:yndex_mobile/data/models/track_item.dart';
 import 'package:yndex_mobile/core/utils/formatters.dart';
 
 void main() {
@@ -43,6 +44,28 @@ void main() {
       expect(stats.totalTracks, 8965);
       expect(stats.topArtists.first.artist, 'Skrillex');
       expect(stats.topArtists.first.count, 120);
+    });
+
+    test('TrackItem model fromJson test with coverUri', () {
+      final json = {
+        'id': 42,
+        'title': 'Scary Monsters and Nice Sprites',
+        'artist': 'Skrillex',
+        'artists': ['Skrillex'],
+        'duration_sec': 243,
+        'duration_fmt': '4:03',
+        'genre': 'Dubstep & EDM',
+        'genre_color': '#00E5FF',
+        'is_collab': false,
+        'cover_uri': 'https://avatars.yandex.net/get-music-content/123/456/200x200',
+        'yandex_url': 'https://music.yandex.ru/track/42',
+      };
+      final track = TrackItem.fromJson(json);
+      expect(track.id, 42);
+      expect(track.title, 'Scary Monsters and Nice Sprites');
+      expect(track.artist, 'Skrillex');
+      expect(track.coverUri, 'https://avatars.yandex.net/get-music-content/123/456/200x200');
+      expect(track.isCollab, false);
     });
   });
 }

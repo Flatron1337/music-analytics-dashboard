@@ -97,6 +97,8 @@ class ApiService {
   Future<Map<String, dynamic>> fetchTracks({
     String query = '',
     String genre = '',
+    String sortBy = 'newest',
+    String collabFilter = 'all',
     int page = 1,
     int limit = 40,
   }) async {
@@ -107,6 +109,8 @@ class ApiService {
     };
     if (query.isNotEmpty) queryParams['q'] = query;
     if (genre.isNotEmpty && genre != 'Все') queryParams['genre'] = genre;
+    if (sortBy.isNotEmpty && sortBy != 'newest') queryParams['sort'] = sortBy;
+    if (collabFilter.isNotEmpty && collabFilter != 'all') queryParams['collab'] = collabFilter;
 
     final uri = Uri.parse('$host${ApiConstants.endpointTracks}').replace(queryParameters: queryParams);
     final response = await http.get(uri).timeout(const Duration(seconds: 15));

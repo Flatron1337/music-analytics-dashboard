@@ -108,7 +108,75 @@ class _TracksTabState extends State<TracksTab> {
                   },
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
+
+              // Collab Type & Sort Row
+              Row(
+                children: [
+                  // Collab filter chips
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildSmallFilterChip('Все', 'all', vm.collabFilter, vm.setCollabFilter),
+                          const SizedBox(width: 6),
+                          _buildSmallFilterChip('Соло', 'solo', vm.collabFilter, vm.setCollabFilter),
+                          const SizedBox(width: 6),
+                          _buildSmallFilterChip('Фиты 🤝', 'collab', vm.collabFilter, vm.setCollabFilter),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Sort Button with PopupMenu
+                  PopupMenuButton<String>(
+                    initialValue: vm.sortBy,
+                    onSelected: (val) => vm.setSortBy(val),
+                    color: AppColors.surfaceElevated,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    itemBuilder: (context) => [
+                      _buildSortMenuItem('newest', 'Сначала новые', Icons.access_time_rounded),
+                      _buildSortMenuItem('oldest', 'Сначала старые', Icons.history_rounded),
+                      _buildSortMenuItem('duration_desc', 'По длительности (длинные)', Icons.timer_outlined),
+                      _buildSortMenuItem('duration_asc', 'По длительности (короткие)', Icons.timer_3_select_outlined),
+                      _buildSortMenuItem('title_asc', 'По названию (А–Я)', Icons.sort_by_alpha_rounded),
+                      _buildSortMenuItem('artist_asc', 'По артисту (А–Я)', Icons.person_search_rounded),
+                    ],
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: vm.sortBy != 'newest' ? AppColors.yandexAmber : AppColors.cardBorder,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.sort_rounded,
+                            size: 16,
+                            color: vm.sortBy != 'newest' ? AppColors.yandexAmber : AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _getSortLabel(vm.sortBy),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: vm.sortBy != 'newest' ? AppColors.yandexAmber : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
 
               // Stats counter
               Row(
@@ -197,4 +265,72 @@ class _TracksTabState extends State<TracksTab> {
       ],
     );
   }
+
+  Widget _buildSmallFilterChip(
+    String label,
+    String value,
+    String current,
+    Function(String) onSelect,
+  ) {
+    final isSelected = current == value;
+    return GestureDetector(
+      onTap: () => onSelect(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.yandexAmber.withValues(alpha: 0.2)
+              : AppColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? AppColors.yandexAmber : AppColors.cardBorder,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? AppColors.yandexAmber : AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _buildSortMenuItem(
+    String value,
+    String text,
+    IconData icon,
+  ) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppColors.textSecondary),
+          const SizedBox(width: 10),
+          Text(text, style: const TextStyle(fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  String _getSortLabel(String sort) {
+    switch (sort) {
+      case 'oldest':
+        return 'Старые';
+      case 'duration_desc':
+        return 'Длинные';
+      case 'duration_asc':
+        return 'Короткие';
+      case 'title_asc':
+        return 'А–Я';
+      case 'artist_asc':
+        return 'Артист';
+      case 'newest':
+      default:
+        return 'Новые';
+    }
+  }
 }
+

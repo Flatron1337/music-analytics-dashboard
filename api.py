@@ -29,6 +29,9 @@ CORS(app)
 DEFAULT_FILE_PATH = os.path.join(
     os.path.dirname(__file__), "Мне нравится_965180470_20260915_213456.txt"
 )
+SYNCED_CACHE_PATH = os.path.join(
+    os.path.dirname(__file__), "synced_likes.pkl"
+)
 
 # Global in-memory cache
 _df_cache: Optional[pd.DataFrame] = None
@@ -58,6 +61,17 @@ def get_dataset() -> pd.DataFrame:
     if _df_cache is not None:
         return _df_cache
 
+    # 1. First check if there is an up-to-date synced collection on disk
+    if os.path.exists(SYNCED_CACHE_PATH):
+        try:
+            persisted_df = pd.read_pickle(SYNCED_CACHE_PATH)
+            if not persisted_df.empty:
+                _df_cache = persisted_df
+                return _df_cache
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки кэша синхронизации: {e}", flush=True)
+
+    # 2. Fallback to base playlist file
     if not os.path.exists(DEFAULT_FILE_PATH):
         _df_cache = pd.DataFrame()
         return _df_cache
@@ -248,19 +262,43 @@ def get_tracks():
 
     query = request.args.get("q", "").strip().lower()
     genre_filter = request.args.get("genre", "").strip()
+    sort_by = request.args.get("sort", "newest").strip().lower()
+    collab_filter = request.args.get("collab", "all").strip().lower()
     page = max(1, int(request.args.get("page", 1)))
     limit = max(1, min(100, int(request.args.get("limit", 40))))
 
     filtered = df
 
-    if genre_filter and genre_filter.lower() != "all":
+    # Filter by genre
+    if genre_filter and genre_filter.lower() != "all" and genre_filter.lower() != "все":
         filtered = filtered[filtered["genre_cluster"] == genre_filter]
 
+    # Filter by collaboration type (solo vs collab)
+    if collab_filter == "solo":
+        filtered = filtered[~filtered["is_collab"]]
+    elif collab_filter == "collab":
+        filtered = filtered[filtered["is_collab"]]
+
+    # Search query
     if query:
         filtered = filtered[
             filtered["title_raw"].str.lower().str.contains(query, na=False)
             | filtered["artist_raw"].str.lower().str.contains(query, na=False)
         ]
+
+    # Sort tracks
+    if sort_by == "oldest":
+        filtered = filtered.sort_values(by="id", ascending=False)
+    elif sort_by == "duration_desc":
+        filtered = filtered.sort_values(by="duration_sec", ascending=False)
+    elif sort_by == "duration_asc":
+        filtered = filtered.sort_values(by="duration_sec", ascending=True)
+    elif sort_by == "title_asc":
+        filtered = filtered.sort_values(by="title_raw", key=lambda s: s.str.lower(), ascending=True)
+    elif sort_by == "artist_asc":
+        filtered = filtered.sort_values(by="artist_raw", key=lambda s: s.str.lower(), ascending=True)
+    else:  # newest / default
+        filtered = filtered.sort_values(by="id", ascending=True)
 
     total_filtered = len(filtered)
     total_pages = max(1, math.ceil(total_filtered / limit))
@@ -274,7 +312,7 @@ def get_tracks():
         title = row.get("title_raw", "")
         artist = row.get("artist_raw", "")
         yandex_query = urllib.parse.quote_plus(f"{artist} - {title}")
-        yandex_url = f"https://music.yandex.ru/search?text={yandex_query}"
+        yandex_url = row.get("yandex_url") or f"https://music.yandex.ru/search?text={yandex_query}"
 
         tracks.append({
             "id": int(row.get("id", 0)),
@@ -380,6 +418,12 @@ def sync_likes():
 
     likes_df["genre_cluster"] = genres
     _df_cache = likes_df
+
+    # Persist synced collection to disk so it survives server restarts
+    try:
+        likes_df.to_pickle(SYNCED_CACHE_PATH)
+    except Exception as e:
+        print(f"⚠️ Не удалось сохранить кэш синхронизации на диск: {e}", flush=True)
 
     return jsonify({
         "success": True,

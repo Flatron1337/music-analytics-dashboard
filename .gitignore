@@ -8,3 +8,4 @@ venv/
 .vscode/
 *.sqlite-shm
 *.sqlite-wal
+*.pkl

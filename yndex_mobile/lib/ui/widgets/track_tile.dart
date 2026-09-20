@@ -40,20 +40,47 @@ class TrackTile extends StatelessWidget {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: track.genreColor.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: track.genreColor.withValues(alpha: 0.3)),
-          ),
-          child: Center(
-            child: Icon(
-              track.isCollab ? Icons.group_rounded : Icons.music_note_rounded,
-              color: track.genreColor,
-              size: 22,
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: track.genreColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: track.genreColor.withValues(alpha: 0.3)),
             ),
+            child: track.coverUri.isNotEmpty
+                ? Image.network(
+                    track.coverUri,
+                    width: 44,
+                    height: 44,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Center(
+                      child: Icon(
+                        track.isCollab ? Icons.group_rounded : Icons.music_note_rounded,
+                        color: track.genreColor,
+                        size: 22,
+                      ),
+                    ),
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Center(
+                        child: Icon(
+                          track.isCollab ? Icons.group_rounded : Icons.music_note_rounded,
+                          color: track.genreColor.withValues(alpha: 0.6),
+                          size: 20,
+                        ),
+                      );
+                    },
+                  )
+                : Center(
+                    child: Icon(
+                      track.isCollab ? Icons.group_rounded : Icons.music_note_rounded,
+                      color: track.genreColor,
+                      size: 22,
+                    ),
+                  ),
           ),
         ),
         title: Text(

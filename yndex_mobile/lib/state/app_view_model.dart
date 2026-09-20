@@ -54,6 +54,10 @@ class AppViewModel extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   String _selectedGenreFilter = 'Все';
   String get selectedGenreFilter => _selectedGenreFilter;
+  String _sortBy = 'newest';
+  String get sortBy => _sortBy;
+  String _collabFilter = 'all';
+  String get collabFilter => _collabFilter;
 
   void setTab(int index) {
     _selectedTabIndex = index;
@@ -149,6 +153,8 @@ class AppViewModel extends ChangeNotifier {
       final res = await repository.apiService.fetchTracks(
         query: _searchQuery,
         genre: _selectedGenreFilter == 'Все' ? '' : _selectedGenreFilter,
+        sortBy: _sortBy,
+        collabFilter: _collabFilter,
         page: _tracksPage,
         limit: 40,
       );
@@ -173,6 +179,18 @@ class AppViewModel extends ChangeNotifier {
   void setGenreFilter(String genre) {
     if (_selectedGenreFilter == genre) return;
     _selectedGenreFilter = genre;
+    loadTracks(resetPage: true);
+  }
+
+  void setSortBy(String sort) {
+    if (_sortBy == sort) return;
+    _sortBy = sort;
+    loadTracks(resetPage: true);
+  }
+
+  void setCollabFilter(String collab) {
+    if (_collabFilter == collab) return;
+    _collabFilter = collab;
     loadTracks(resetPage: true);
   }
 
