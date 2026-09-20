@@ -121,6 +121,7 @@ def index():
             "/api/auth/device-code",
             "/api/auth/poll-token",
             "/api/sync-likes",
+            "/api/export-playlist",
         ],
     })
 
@@ -431,6 +432,103 @@ def sync_likes():
         "message": f"Синхронизировано {len(likes_df)} треков из Яндекс Музыки!"
     })
 
+
+@app.route("/api/export-playlist", methods=["POST"])
+def export_playlist():
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "").strip()
+    if not token:
+        return jsonify({"success": False, "error": "Требуется токен авторизации (token)"}), 400
+
+    preset = data.get("preset", "genre").strip().lower()
+    genre = data.get("genre", "").strip()
+    custom_title = data.get("title", "").strip()
+    limit = max(1, min(300, int(data.get("limit", 100))))
+
+    # 1. Проверяем авторизацию пользователя
+    client, user_info, err = yandex_api.login_yandex(token)
+    if err or not client:
+        return jsonify({"success": False, "error": err or "Ошибка авторизации в Яндекс Музыке"}), 401
+
+    # 2. Получаем текущую коллекцию
+    df = get_dataset()
+    if df.empty:
+        return jsonify({"success": False, "error": "Медиатека пуста или ещё не загружена"}), 400
+
+    if "track_id" not in df.columns or df["track_id"].dropna().empty:
+        return jsonify({
+            "success": False,
+            "error": "В текущей медиатеке отсутствуют ID треков Яндекс Музыки. Сначала выполните синхронизацию медиатеки (кнопка «Синхронизировать лайки» в профиле)."
+        }), 400
+
+    # Отбираем валидные треки с track_id
+    df_valid = df[df["track_id"].notna() & (df["track_id"].astype(str) != "")].copy()
+    if df_valid.empty:
+        return jsonify({
+            "success": False,
+            "error": "Не найдено треков с валидными ID. Пожалуйста, выполните синхронизацию лайков."
+        }), 400
+
+    # 3. Фильтрация по пресетам
+    default_title = "Умный плейлист"
+    if preset == "genre":
+        if not genre or genre.lower() in ("все", "all"):
+            return jsonify({"success": False, "error": "Для пресета 'genre' необходимо указать конкретный жанр"}), 400
+        filtered = df_valid[df_valid["genre_cluster"] == genre]
+        default_title = f"⚡ {genre} — Подборка"
+
+    elif preset == "collab":
+        filtered = df_valid[df_valid["is_collab"]]
+        default_title = "🤝 Фитотека — Все коллаборации"
+
+    elif preset == "solo":
+        filtered = df_valid[~df_valid["is_collab"]]
+        default_title = "🎙️ Соло — Чистый вокал"
+
+    elif preset == "gems":
+        # Артисты, у которых не более 2 треков в медиатеке
+        artist_counts = df_valid["primary_artist"].value_counts()
+        rare_artists = set(artist_counts[artist_counts <= 2].index)
+        filtered = df_valid[df_valid["primary_artist"].isin(rare_artists)]
+        default_title = "💎 Скрытые жемчужины — Редкие артисты"
+
+    elif preset == "golden_era":
+        # Самые первые добавленные треки (наибольший id в порядке лайков)
+        filtered = df_valid.sort_values(by="id", ascending=False)
+        default_title = "⏳ Золотая эра — Первые лайки"
+
+    else:
+        return jsonify({
+            "success": False,
+            "error": f"Неизвестный пресет '{preset}'. Доступные: genre, collab, solo, gems, golden_era"
+        }), 400
+
+    if filtered.empty:
+        return jsonify({"success": False, "error": "По выбранному фильтру не найдено подходящих треков"}), 404
+
+    subset = filtered.head(limit)
+    final_title = custom_title if custom_title else default_title
+
+    # 4. Подготавливаем структуру треков для yandex_api.create_remote_playlist
+    track_dicts = []
+    for _, row in subset.iterrows():
+        track_dicts.append({
+            "track_id": str(row["track_id"]),
+            "album_id": str(row.get("album_id", "")) if pd.notna(row.get("album_id")) else ""
+        })
+
+    # 5. Создаём удалённый плейлист в аккаунте Яндекс Музыки
+    success, msg, url = yandex_api.create_remote_playlist(client, final_title, track_dicts)
+    if not success:
+        return jsonify({"success": False, "error": msg}), 500
+
+    return jsonify({
+        "success": True,
+        "message": msg,
+        "playlist_title": final_title,
+        "playlist_url": url,
+        "tracks_count": len(track_dicts),
+    })
 
 
 if __name__ == "__main__":

@@ -10,6 +10,9 @@ class ApiConstants {
 
   static const String prefServerUrlKey = 'custom_server_url';
   static const String prefYandexTokenKey = 'yandex_music_token';
+  static const String prefCacheOverviewKey = 'cache_overview_json';
+  static const String prefCacheGenresKey = 'cache_genres_json';
+  static const String prefCacheTimelineKey = 'cache_timeline_json';
 
   // Endpoints
   static const String endpointHealth = '/api/health';

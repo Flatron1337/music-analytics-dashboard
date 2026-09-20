@@ -171,6 +171,48 @@ class YandexAuthViewModel extends ChangeNotifier {
     }
   }
 
+  bool _isExporting = false;
+  bool get isExporting => _isExporting;
+
+  String? _exportStatus;
+  String? get exportStatus => _exportStatus;
+
+  Future<Map<String, dynamic>?> exportPlaylist({
+    required String preset,
+    String? genre,
+    String? title,
+    int limit = 100,
+  }) async {
+    if (_savedToken == null || _savedToken!.isEmpty) {
+      _exportStatus = 'Требуется авторизация в Яндекс Музыке';
+      notifyListeners();
+      return null;
+    }
+
+    _isExporting = true;
+    _exportStatus = 'Создание плейлиста в Яндекс Музыке...';
+    notifyListeners();
+
+    try {
+      final res = await apiService.exportPlaylist(
+        token: _savedToken!,
+        preset: preset,
+        genre: genre,
+        title: title,
+        limit: limit,
+      );
+      _isExporting = false;
+      _exportStatus = res['message'] ?? 'Плейлист успешно создан!';
+      notifyListeners();
+      return res;
+    } catch (e) {
+      _isExporting = false;
+      _exportStatus = e.toString().replaceFirst('Exception: ', '');
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   @override
   void dispose() {
     _cancelPolling();

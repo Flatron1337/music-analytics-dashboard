@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yndex_mobile/data/models/genre_cluster.dart';
 import 'package:yndex_mobile/data/models/overview_stats.dart';
 import 'package:yndex_mobile/data/models/track_item.dart';
+import 'package:yndex_mobile/data/models/timeline_point.dart';
 import 'package:yndex_mobile/core/utils/formatters.dart';
 
 void main() {
@@ -66,6 +67,25 @@ void main() {
       expect(track.artist, 'Skrillex');
       expect(track.coverUri, 'https://avatars.yandex.net/get-music-content/123/456/200x200');
       expect(track.isCollab, false);
+    });
+
+    test('TimelineSegment model fromJson test', () {
+      final json = {
+        'segment_index': 0,
+        'label': '#1–#1000',
+        'tracks_count': 1000,
+        'dominant_genre': 'Dubstep & EDM',
+        'dominant_color': '#00E5FF',
+        'genres': [
+          {'genre': 'Dubstep & EDM', 'count': 400, 'color': '#00E5FF', 'percent': 40.0}
+        ],
+      };
+      final seg = TimelineSegment.fromJson(json);
+      expect(seg.segmentIndex, 0);
+      expect(seg.label, '#1–#1000');
+      expect(seg.dominantGenre, 'Dubstep & EDM');
+      expect(seg.genres.length, 1);
+      expect(seg.genres.first.percent, 40.0);
     });
   });
 }

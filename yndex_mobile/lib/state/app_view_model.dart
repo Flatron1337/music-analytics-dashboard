@@ -66,6 +66,17 @@ class AppViewModel extends ChangeNotifier {
 
   Future<void> init() async {
     _serverUrl = await repository.apiService.baseUrl;
+
+    // 1. Instant 0ms Cold-Start from local offline cache
+    await repository.loadFromLocalCache();
+    if (repository.cachedOverview != null) {
+      _overviewStats = repository.cachedOverview;
+      _genres = repository.cachedGenres ?? [];
+      _timeline = repository.cachedTimeline ?? [];
+      notifyListeners(); // UI displays immediately!
+    }
+
+    // 2. Fetch fresh data in background
     await checkConnection();
     if (_isServerConnected) {
       await loadDashboardData();
@@ -97,15 +108,19 @@ class AppViewModel extends ChangeNotifier {
   }
 
   Future<void> loadOverview({bool forceRefresh = false}) async {
-    _isLoadingOverview = true;
+    if (_overviewStats == null) {
+      _isLoadingOverview = true;
+      notifyListeners();
+    }
     _overviewError = null;
-    notifyListeners();
 
     try {
       _overviewStats = await repository.getOverview(forceRefresh: forceRefresh);
       _isServerConnected = true;
     } catch (e) {
-      _overviewError = e.toString().replaceFirst('Exception: ', '');
+      if (_overviewStats == null) {
+        _overviewError = e.toString().replaceFirst('Exception: ', '');
+      }
       _isServerConnected = false;
     } finally {
       _isLoadingOverview = false;
@@ -114,13 +129,17 @@ class AppViewModel extends ChangeNotifier {
   }
 
   Future<void> loadGenres({bool forceRefresh = false}) async {
-    _isLoadingGenres = true;
-    notifyListeners();
+    if (_genres.isEmpty) {
+      _isLoadingGenres = true;
+      notifyListeners();
+    }
 
     try {
       _genres = await repository.getGenres(forceRefresh: forceRefresh);
     } catch (_) {
-      _genres = [];
+      if (_genres.isEmpty) {
+        _genres = [];
+      }
     } finally {
       _isLoadingGenres = false;
       notifyListeners();
@@ -128,13 +147,17 @@ class AppViewModel extends ChangeNotifier {
   }
 
   Future<void> loadTimeline({bool forceRefresh = false}) async {
-    _isLoadingTimeline = true;
-    notifyListeners();
+    if (_timeline.isEmpty) {
+      _isLoadingTimeline = true;
+      notifyListeners();
+    }
 
     try {
       _timeline = await repository.getTimeline(forceRefresh: forceRefresh);
     } catch (_) {
-      _timeline = [];
+      if (_timeline.isEmpty) {
+        _timeline = [];
+      }
     } finally {
       _isLoadingTimeline = false;
       notifyListeners();

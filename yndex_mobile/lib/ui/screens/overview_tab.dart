@@ -3,6 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../state/app_view_model.dart';
 import '../widgets/metric_card.dart';
+import '../widgets/skeleton_loader.dart';
 
 class OverviewTab extends StatelessWidget {
   final AppViewModel viewModel;
@@ -11,8 +12,8 @@ class OverviewTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (viewModel.isLoadingOverview) {
-      return const Center(child: CircularProgressIndicator());
+    if (viewModel.isLoadingOverview && viewModel.overviewStats == null) {
+      return const OverviewSkeleton();
     }
 
     final stats = viewModel.overviewStats;

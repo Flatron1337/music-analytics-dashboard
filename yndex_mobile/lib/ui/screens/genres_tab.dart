@@ -4,6 +4,7 @@ import '../../core/utils/formatters.dart';
 import '../../data/models/genre_cluster.dart';
 import '../../state/app_view_model.dart';
 import '../widgets/genre_pie_chart.dart';
+import '../widgets/skeleton_loader.dart';
 
 class GenresTab extends StatelessWidget {
   final AppViewModel viewModel;
@@ -17,8 +18,8 @@ class GenresTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (viewModel.isLoadingGenres) {
-      return const Center(child: CircularProgressIndicator());
+    if (viewModel.isLoadingGenres && viewModel.genres.isEmpty) {
+      return const GenresSkeleton();
     }
 
     final clusters = viewModel.genres;

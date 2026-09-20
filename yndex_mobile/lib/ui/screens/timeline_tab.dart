@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../state/app_view_model.dart';
+import '../widgets/skeleton_loader.dart';
 
 class TimelineTab extends StatelessWidget {
   final AppViewModel viewModel;
@@ -9,8 +10,8 @@ class TimelineTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (viewModel.isLoadingTimeline) {
-      return const Center(child: CircularProgressIndicator());
+    if (viewModel.isLoadingTimeline && viewModel.timeline.isEmpty) {
+      return const TimelineSkeleton();
     }
 
     final segments = viewModel.timeline;

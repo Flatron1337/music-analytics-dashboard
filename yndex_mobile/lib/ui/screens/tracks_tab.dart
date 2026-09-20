@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../state/app_view_model.dart';
+import '../widgets/skeleton_loader.dart';
 import '../widgets/track_tile.dart';
 
 class TracksTab extends StatefulWidget {
@@ -204,9 +205,11 @@ class _TracksTabState extends State<TracksTab> {
 
         // Track List
         Expanded(
-          child: vm.isLoadingTracks
-              ? const Center(child: CircularProgressIndicator())
-              : vm.tracks.isEmpty
+          child: vm.isLoadingTracks && vm.tracks.isEmpty
+              ? const TracksSkeleton()
+              : vm.isLoadingTracks
+                  ? const Center(child: CircularProgressIndicator())
+                  : vm.tracks.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,

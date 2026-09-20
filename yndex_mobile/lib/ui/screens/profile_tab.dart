@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../state/app_view_model.dart';
 import '../../state/yandex_auth_view_model.dart';
 import '../widgets/server_settings_sheet.dart';
+import '../widgets/smart_playlist_sheet.dart';
 
 class ProfileTab extends StatelessWidget {
   final AppViewModel appViewModel;
@@ -254,6 +255,126 @@ class ProfileTab extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 20),
+
+            // Smart Playlists Generator Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.neonPurple.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.neonPurple.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.auto_awesome_rounded, color: AppColors.neonPurple, size: 28),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Умные плейлисты',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.yandexAmber.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'НОВОЕ',
+                                    style: TextStyle(
+                                      color: AppColors.yandexAmber,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Text(
+                              'Экспорт подборок прямо в ваш аккаунт',
+                              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Создавайте тематические плейлисты на основе алгоритмического анализа ваших треков:',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Quick presets row
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ActionChip(
+                        avatar: const Icon(Icons.bolt_rounded, size: 14, color: AppColors.yandexAmber),
+                        label: const Text('Жанр'),
+                        onPressed: () => _openSmartPlaylist(context, 'genre'),
+                        backgroundColor: AppColors.surfaceElevated,
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.people_alt_rounded, size: 14, color: AppColors.neonPurple),
+                        label: const Text('Фитотека'),
+                        onPressed: () => _openSmartPlaylist(context, 'collab'),
+                        backgroundColor: AppColors.surfaceElevated,
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.diamond_rounded, size: 14, color: AppColors.cyberCyan),
+                        label: const Text('Жемчужины'),
+                        onPressed: () => _openSmartPlaylist(context, 'gems'),
+                        backgroundColor: AppColors.surfaceElevated,
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.history_rounded, size: 14, color: AppColors.neonGreen),
+                        label: const Text('Золотая эра'),
+                        onPressed: () => _openSmartPlaylist(context, 'golden_era'),
+                        backgroundColor: AppColors.surfaceElevated,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => _openSmartPlaylist(context, 'genre'),
+                      icon: const Icon(Icons.playlist_add_rounded),
+                      label: const Text('Сгенерировать умный плейлист'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.neonPurple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 24),
 
             // Server Connection Card
@@ -337,6 +458,25 @@ class ProfileTab extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+
+  void _openSmartPlaylist(BuildContext context, String preset) {
+    if (!authViewModel.isAuthenticated) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Для экспорта плейлистов сначала войдите в Яндекс Музыку выше'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    SmartPlaylistSheet.show(
+      context,
+      appViewModel: appViewModel,
+      authViewModel: authViewModel,
+      initialPreset: preset,
     );
   }
 }

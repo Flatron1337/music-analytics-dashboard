@@ -59,7 +59,12 @@ class ApiService {
     final response = await http.get(uri).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final jsonStr = utf8.decode(response.bodyBytes);
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(ApiConstants.prefCacheOverviewKey, jsonStr);
+      } catch (_) {}
       return OverviewStats.fromJson(data);
     } else {
       throw Exception('Ошибка загрузки статистики (${response.statusCode})');
@@ -72,7 +77,12 @@ class ApiService {
     final response = await http.get(uri).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final jsonStr = utf8.decode(response.bodyBytes);
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(ApiConstants.prefCacheGenresKey, jsonStr);
+      } catch (_) {}
       final rawList = data['clusters'] as List<dynamic>? ?? [];
       return rawList.map((e) => GenreCluster.fromJson(e as Map<String, dynamic>)).toList();
     } else {
@@ -86,7 +96,12 @@ class ApiService {
     final response = await http.get(uri).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final jsonStr = utf8.decode(response.bodyBytes);
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(ApiConstants.prefCacheTimelineKey, jsonStr);
+      } catch (_) {}
       final rawList = data['segments'] as List<dynamic>? ?? [];
       return rawList.map((e) => TimelineSegment.fromJson(e as Map<String, dynamic>)).toList();
     } else {
@@ -168,6 +183,41 @@ class ApiService {
       return data;
     } else {
       throw Exception(data['error'] ?? 'Ошибка синхронизации лайков');
+    }
+  }
+
+  Future<Map<String, dynamic>> exportPlaylist({
+    required String token,
+    required String preset,
+    String? genre,
+    String? title,
+    int limit = 100,
+  }) async {
+    final host = await baseUrl;
+    final uri = Uri.parse('$host${ApiConstants.endpointExportPlaylist}');
+    final payload = <String, dynamic>{
+      'token': token,
+      'preset': preset,
+      'limit': limit,
+    };
+    if (genre != null && genre.isNotEmpty) {
+      payload['genre'] = genre;
+    }
+    if (title != null && title.isNotEmpty) {
+      payload['title'] = title;
+    }
+
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    ).timeout(const Duration(seconds: 60));
+
+    final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    if (response.statusCode == 200 && data['success'] == true) {
+      return data;
+    } else {
+      throw Exception(data['error'] ?? 'Не удалось экспортировать плейлист');
     }
   }
 }

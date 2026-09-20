@@ -12,6 +12,7 @@ class AppColors {
   static const Color yandexRed = Color(0xFFFF3333);
   static const Color neonPurple = Color(0xFF9D4EDD);
   static const Color neonCyan = Color(0xFF00E5FF);
+  static const Color cyberCyan = Color(0xFF00E5FF);
   static const Color neonGreen = Color(0xFF00E676);
 
   // Text
