@@ -7,6 +7,8 @@ import '../../data/models/overview_stats.dart';
 import '../../data/models/genre_cluster.dart';
 import 'music_story_widget.dart';
 
+import '../../core/utils/story_saver.dart';
+
 class StoryPreviewDialog extends StatefulWidget {
   final OverviewStats stats;
   final List<GenreCluster> clusters;
@@ -52,12 +54,17 @@ class _StoryPreviewDialogState extends State<StoryPreviewDialog> {
       }
 
       final pngBytes = byteData.buffer.asUint8List();
+      final filename = 'music_story_${DateTime.now().millisecondsSinceEpoch}.png';
+      final savedPath = await saveStoryImage(pngBytes, filename);
 
       if (mounted) {
         setState(() => _isExporting = false);
+        final msg = savedPath != null
+            ? 'Story сохранена в $savedPath (${pngBytes.lengthInBytes ~/ 1024} КБ)'
+            : 'Story сгенерирована (${pngBytes.lengthInBytes ~/ 1024} КБ)';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Story успешно сгенерирована (${pngBytes.lengthInBytes ~/ 1024} КБ)!'),
+            content: Text(msg),
             backgroundColor: AppColors.neonGreen,
             duration: const Duration(seconds: 4),
           ),

@@ -152,24 +152,40 @@ async def proxy_http_request(request: web.Request, target_base_url: str) -> web.
     max_retries = 4
     retry_delay = 1.2
 
+    accept_hdr = request.headers.get("Accept", "").lower()
+    is_stream_request = "event-stream" in accept_hdr or "stream" in request.path.lower()
+    timeout_duration = 300 if is_stream_request else 45
+
     for attempt in range(max_retries):
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout_cfg = aiohttp.ClientTimeout(total=timeout_duration, connect=12)
+            async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
                 async with session.request(
                     method=request.method,
                     url=target_url,
                     headers=headers,
                     data=req_data,
                     allow_redirects=False,
-                    timeout=aiohttp.ClientTimeout(total=45),
                 ) as upstream_response:
-                    content = await upstream_response.read()
-
+                    content_type = upstream_response.headers.get("Content-Type", "").lower()
                     response_headers = {}
                     for k, v in upstream_response.headers.items():
                         if k.lower() not in HOP_BY_HOP_HEADERS:
                             response_headers[k] = v
 
+                    if "text/event-stream" in content_type or is_stream_request:
+                        stream_resp = web.StreamResponse(
+                            status=upstream_response.status,
+                            headers=response_headers,
+                        )
+                        await stream_resp.prepare(request)
+                        async for chunk in upstream_response.content.iter_any():
+                            await stream_resp.write(chunk)
+                        await stream_resp.write_eof()
+                        print(f"[{request.method}] {request.path_qs} -> Stream completed ({upstream_response.status})", flush=True)
+                        return stream_resp
+
+                    content = await upstream_response.read()
                     print(f"[{request.method}] {request.path_qs} -> Upstream ({upstream_response.status})", flush=True)
                     return web.Response(
                         body=content,

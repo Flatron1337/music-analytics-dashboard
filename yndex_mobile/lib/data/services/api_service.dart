@@ -281,7 +281,7 @@ class ApiService {
       request.headers['Accept'] = 'text/event-stream';
       request.headers['Cache-Control'] = 'no-cache';
 
-      final streamedResponse = await client.send(request).timeout(const Duration(seconds: 15));
+      final streamedResponse = await client.send(request).timeout(const Duration(seconds: 60));
 
       if (streamedResponse.statusCode != 200) {
         final errorBody = await streamedResponse.stream.bytesToString();
