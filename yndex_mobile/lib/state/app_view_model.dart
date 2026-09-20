@@ -4,11 +4,14 @@ import '../data/models/genre_cluster.dart';
 import '../data/models/track_item.dart';
 import '../data/models/timeline_point.dart';
 import '../data/repositories/music_repository.dart';
+import '../data/services/api_service.dart';
 
 class AppViewModel extends ChangeNotifier {
   final MusicRepository repository;
 
   AppViewModel({required this.repository});
+
+  ApiService get apiService => repository.apiService;
 
   int _selectedTabIndex = 0;
   int get selectedTabIndex => _selectedTabIndex;

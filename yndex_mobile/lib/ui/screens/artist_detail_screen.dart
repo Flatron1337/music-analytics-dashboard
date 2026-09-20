@@ -6,6 +6,7 @@ import '../../data/models/artist_details.dart';
 import '../../data/services/api_service.dart';
 import '../widgets/skeleton_loader.dart';
 import '../widgets/track_tile.dart';
+import 'collaborations_graph_screen.dart';
 
 class ArtistDetailScreen extends StatefulWidget {
   final String artistName;
@@ -303,9 +304,27 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                 'С кем записывал треки',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
-              Text(
-                '${d.topCollaborators.length} артистов',
-                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+              TextButton.icon(
+                onPressed: () {
+                  CollaborationsGraphScreen.navigate(
+                    context,
+                    widget.apiService,
+                    focusArtist: d.artist,
+                  );
+                },
+                icon: const Icon(Icons.hub_rounded, size: 14, color: AppColors.neonCyan),
+                label: const Text(
+                  'Граф связей 🕸️',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.neonCyan,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  backgroundColor: AppColors.neonCyan.withValues(alpha: 0.1),
+                ),
               ),
             ],
           ),

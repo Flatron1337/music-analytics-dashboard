@@ -10,6 +10,8 @@ import '../models/genre_cluster.dart';
 import '../models/track_item.dart';
 import '../models/timeline_point.dart';
 import '../models/artist_details.dart';
+import '../models/collab_graph.dart';
+import '../models/sync_progress_event.dart';
 
 class ApiService {
   String? _customBaseUrl;
@@ -237,6 +239,95 @@ class ApiService {
       } catch (_) {
         throw Exception('Ошибка загрузки данных артиста (${response.statusCode})');
       }
+    }
+  }
+
+  Future<CollabGraphData> fetchCollaborationsGraph({
+    int minCollabs = 1,
+    int limitNodes = 60,
+    String? focusArtist,
+  }) async {
+    final host = await baseUrl;
+    final query = <String, String>{
+      'min_collabs': minCollabs.toString(),
+      'limit_nodes': limitNodes.toString(),
+    };
+    if (focusArtist != null && focusArtist.isNotEmpty) {
+      query['focus_artist'] = focusArtist;
+    }
+
+    final uri = Uri.parse('$host${ApiConstants.endpointCollaborationsGraph}').replace(
+      queryParameters: query,
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 25));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      return CollabGraphData.fromJson(data);
+    } else {
+      throw Exception('Не удалось загрузить граф связей (${response.statusCode})');
+    }
+  }
+
+  Stream<SyncProgressEvent> streamSyncLikes(String token) async* {
+    final host = await baseUrl;
+    final uri = Uri.parse('$host${ApiConstants.endpointSyncLikesStream}').replace(
+      queryParameters: {'token': token},
+    );
+
+    final client = http.Client();
+    try {
+      final request = http.Request('GET', uri);
+      request.headers['Accept'] = 'text/event-stream';
+      request.headers['Cache-Control'] = 'no-cache';
+
+      final streamedResponse = await client.send(request).timeout(const Duration(seconds: 15));
+
+      if (streamedResponse.statusCode != 200) {
+        final errorBody = await streamedResponse.stream.bytesToString();
+        try {
+          final errJson = jsonDecode(errorBody);
+          yield SyncProgressEvent.error(
+            errJson['error'] ?? 'Ошибка подключения (${streamedResponse.statusCode})',
+          );
+        } catch (_) {
+          yield SyncProgressEvent.error(
+            'Ошибка подключения к серверу (${streamedResponse.statusCode})',
+          );
+        }
+        return;
+      }
+
+      String buffer = '';
+      await for (final chunk in streamedResponse.stream.transform(utf8.decoder)) {
+        buffer += chunk;
+        while (buffer.contains('\n\n')) {
+          final eventEnd = buffer.indexOf('\n\n');
+          final rawBlock = buffer.substring(0, eventEnd);
+          buffer = buffer.substring(eventEnd + 2);
+
+          final lines = rawBlock.split('\n');
+          String? dataStr;
+
+          for (final line in lines) {
+            final trimmed = line.trim();
+            if (trimmed.startsWith('data:')) {
+              dataStr = trimmed.substring(5).trim();
+            }
+          }
+
+          if (dataStr != null && dataStr.isNotEmpty) {
+            try {
+              final json = jsonDecode(dataStr) as Map<String, dynamic>;
+              yield SyncProgressEvent.fromJson(json);
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (e) {
+      yield SyncProgressEvent.error('Сбой передачи данных: $e');
+    } finally {
+      client.close();
     }
   }
 }

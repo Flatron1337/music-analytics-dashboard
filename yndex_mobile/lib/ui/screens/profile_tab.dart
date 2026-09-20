@@ -5,6 +5,8 @@ import '../../state/app_view_model.dart';
 import '../../state/yandex_auth_view_model.dart';
 import '../widgets/server_settings_sheet.dart';
 import '../widgets/smart_playlist_sheet.dart';
+import '../widgets/sync_progress_dialog.dart';
+import 'collaborations_graph_screen.dart';
 
 class ProfileTab extends StatelessWidget {
   final AppViewModel appViewModel;
@@ -106,10 +108,29 @@ class ProfileTab extends StatelessWidget {
                           child: FilledButton.icon(
                             onPressed: authViewModel.isSyncing
                                 ? null
-                                : () async {
-                                    final ok = await authViewModel.syncLikes();
-                                    if (ok) {
-                                      appViewModel.loadDashboardData(forceRefresh: true);
+                                : () {
+                                    final token = authViewModel.savedToken;
+                                    if (token != null && token.isNotEmpty) {
+                                      showDialog(
+                                        context: context,
+                                        barrierDismissible: false,
+                                        builder: (dialogCtx) => SyncProgressDialog(
+                                          token: token,
+                                          onComplete: () {
+                                            appViewModel.loadDashboardData(forceRefresh: true);
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Медиатека успешно синхронизирована!'),
+                                                backgroundColor: AppColors.neonGreen,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      );
+                                    } else {
+                                      authViewModel.syncLikes().then((ok) {
+                                        if (ok) appViewModel.loadDashboardData(forceRefresh: true);
+                                      });
                                     }
                                   },
                             icon: authViewModel.isSyncing
@@ -368,6 +389,83 @@ class ProfileTab extends StatelessWidget {
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.neonPurple,
                         foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Collaborations Graph Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.neonCyan.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.neonCyan.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.hub_rounded, color: AppColors.neonCyan, size: 28),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Граф связей артистов',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const SizedBox(width: 6),
+                                const Text('🕸️', style: TextStyle(fontSize: 16)),
+                              ],
+                            ),
+                            const Text(
+                              'Интерактивная карта коллабораций и фитов',
+                              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Исследуйте созвездие любимых музыкантов: смотрите, кто с кем записывал треки, масштабируйте карту и открывайте новые музыкальные галактики.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        CollaborationsGraphScreen.navigate(
+                          context,
+                          appViewModel.apiService,
+                        );
+                      },
+                      icon: const Icon(Icons.travel_explore_rounded),
+                      label: const Text('Открыть интерактивную карту'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.neonCyan,
+                        foregroundColor: Colors.black,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),

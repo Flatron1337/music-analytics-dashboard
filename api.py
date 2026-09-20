@@ -1,11 +1,15 @@
+import json
 import math
 import os
+import queue
 import sys
+import threading
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
+import networkx as nx
 import pandas as pd
 
 from genre_classifier import (
@@ -18,6 +22,7 @@ from genre_classifier import (
     GenreClassifier,
 )
 from parser import (
+    build_collaborations_graph,
     format_seconds,
     load_playlist,
 )
@@ -121,8 +126,10 @@ def index():
             "/api/auth/device-code",
             "/api/auth/poll-token",
             "/api/sync-likes",
+            "/api/sync-likes/stream",
             "/api/export-playlist",
             "/api/artist",
+            "/api/collaborations-graph",
         ],
     })
 
@@ -437,6 +444,178 @@ def sync_likes():
     })
 
 
+@app.route("/api/sync-likes/stream", methods=["GET", "POST"])
+def sync_likes_stream():
+    token = request.args.get("token", "").strip()
+    if not token and request.is_json:
+        data = request.get_json(silent=True) or {}
+        token = data.get("token", "").strip()
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+        elif auth_header:
+            token = auth_header.strip()
+    if not token:
+        token_file = os.path.join(os.path.dirname(__file__), ".yandex_token")
+        if os.path.exists(token_file):
+            try:
+                with open(token_file, "r", encoding="utf-8") as f:
+                    token = f.read().strip()
+            except Exception:
+                pass
+
+    if not token:
+        return jsonify({"success": False, "error": "Токен авторизации (token) не указан"}), 400
+
+    def generate_events():
+        q: queue.Queue = queue.Queue()
+
+        def worker():
+            nonlocal token
+            try:
+                q.put({
+                    "type": "progress",
+                    "stage": "auth",
+                    "percent": 2,
+                    "current": 0,
+                    "total": 0,
+                    "message": "Подключение к Яндекс Музыке..."
+                })
+
+                client, user_info, err = yandex_api.login_yandex(token)
+                if err or not client:
+                    q.put({
+                        "type": "error",
+                        "stage": "error",
+                        "percent": 0,
+                        "message": err or "Недействительный токен Яндекс Музыки"
+                    })
+                    return
+
+                user_title = user_info.get("full_name") or user_info.get("login") or "Пользователь"
+                q.put({
+                    "type": "progress",
+                    "stage": "fetching_init",
+                    "percent": 5,
+                    "current": 0,
+                    "total": 0,
+                    "message": f"Авторизован как {user_title}. Запрос треков..."
+                })
+
+                def on_progress(current_pct: int, total_pct: int, msg: str):
+                    scaled_pct = int(5 + (current_pct * 0.80))
+                    q.put({
+                        "type": "progress",
+                        "stage": "fetching",
+                        "percent": min(85, max(5, scaled_pct)),
+                        "current": current_pct,
+                        "total": total_pct,
+                        "message": msg
+                    })
+
+                likes_df = yandex_api.fetch_user_likes_df(client, progress_callback=on_progress)
+                if likes_df is None or likes_df.empty:
+                    q.put({
+                        "type": "error",
+                        "stage": "error",
+                        "percent": 0,
+                        "message": "Не удалось загрузить треки или медиатека пуста"
+                    })
+                    return
+
+                total_tracks = len(likes_df)
+                q.put({
+                    "type": "progress",
+                    "stage": "classifying",
+                    "percent": 88,
+                    "current": total_tracks,
+                    "total": total_tracks,
+                    "message": f"Классификация жанров для {total_tracks:,} треков..."
+                })
+
+                artists_raw = likes_df["artist_raw"].tolist()
+                titles_raw = likes_df["title_raw"].tolist()
+                all_artists_list = likes_df["all_artists"].tolist()
+                genres = [
+                    _classifier.classify_track(
+                        artist_raw=a,
+                        title_raw=t,
+                        all_artists=aa,
+                        allow_network=False,
+                    )[0]
+                    for a, t, aa in zip(artists_raw, titles_raw, all_artists_list)
+                ]
+
+                if "artists_count" not in likes_df.columns:
+                    if "all_artists" in likes_df.columns:
+                        likes_df["artists_count"] = likes_df["all_artists"].apply(
+                            lambda a: len(a) if isinstance(a, list) else 1
+                        )
+                    else:
+                        likes_df["artists_count"] = 1
+                if "is_collab" not in likes_df.columns:
+                    likes_df["is_collab"] = likes_df["artists_count"] > 1
+
+                likes_df["genre_cluster"] = genres
+
+                global _df_cache
+                _df_cache = likes_df
+
+                try:
+                    likes_df.to_pickle(SYNCED_CACHE_PATH)
+                    token_path = os.path.join(os.path.dirname(__file__), ".yandex_token")
+                    with open(token_path, "w", encoding="utf-8") as f:
+                        f.write(token)
+                except Exception as ex:
+                    print(f"⚠️ Не удалось сохранить кэш: {ex}", flush=True)
+
+                q.put({
+                    "type": "complete",
+                    "stage": "done",
+                    "percent": 100,
+                    "current": total_tracks,
+                    "total": total_tracks,
+                    "tracks_synced": total_tracks,
+                    "message": f"Синхронизировано {total_tracks:,} треков из Яндекс Музыки!"
+                })
+            except Exception as e:
+                q.put({
+                    "type": "error",
+                    "stage": "error",
+                    "percent": 0,
+                    "message": f"Ошибка синхронизации: {e}"
+                })
+            finally:
+                q.put(None)
+
+        worker_thread = threading.Thread(target=worker, daemon=True)
+        worker_thread.start()
+
+        while True:
+            try:
+                item = q.get(timeout=20)
+                if item is None:
+                    break
+                event_name = item.get("type", "message")
+                data_str = json.dumps(item, ensure_ascii=False)
+                yield f"event: {event_name}\ndata: {data_str}\n\n"
+            except queue.Empty:
+                yield ": keepalive\n\n"
+
+    return Response(
+        generate_events(),
+        mimetype="text/event-stream",
+        headers={
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
+        }
+    )
+
+
 @app.route("/api/export-playlist", methods=["POST"])
 def export_playlist():
     data = request.get_json(silent=True) or {}
@@ -662,6 +841,118 @@ def get_artist():
         "top_collaborators": top_collabs,
         "tracks": tracks,
         "yandex_url": artist_yandex_url,
+    })
+
+
+@app.route("/api/collaborations-graph", methods=["GET"])
+def get_collaborations_graph():
+    df = get_dataset()
+    if df.empty:
+        return jsonify({
+            "nodes": [],
+            "edges": [],
+            "stats": {"total_nodes": 0, "total_edges": 0, "focus_artist": None}
+        })
+
+    try:
+        min_collabs = int(request.args.get("min_collabs", 1))
+    except (ValueError, TypeError):
+        min_collabs = 1
+
+    try:
+        limit_nodes = int(request.args.get("limit_nodes", 60))
+    except (ValueError, TypeError):
+        limit_nodes = 60
+
+    focus_artist = request.args.get("focus_artist", "").strip() or None
+
+    full_graph = build_collaborations_graph(
+        df,
+        min_collaborations=min_collabs,
+        focus_artist=focus_artist,
+    )
+
+    if full_graph.number_of_nodes() == 0:
+        return jsonify({
+            "nodes": [],
+            "edges": [],
+            "stats": {"total_nodes": 0, "total_edges": 0, "focus_artist": focus_artist}
+        })
+
+    if not focus_artist and full_graph.number_of_nodes() > limit_nodes:
+        top_candidates = sorted(
+            full_graph.nodes(),
+            key=lambda n: (full_graph.degree(n), full_graph.nodes[n].get("count", 0)),
+            reverse=True
+        )[:limit_nodes]
+        subg = full_graph.subgraph(top_candidates).copy()
+        connected = [n for n in subg.nodes() if subg.degree(n) > 0]
+        graph = subg.subgraph(connected).copy() if connected else subg
+    else:
+        graph = full_graph
+
+    if graph.number_of_nodes() == 0:
+        return jsonify({
+            "nodes": [],
+            "edges": [],
+            "stats": {"total_nodes": 0, "total_edges": 0, "focus_artist": focus_artist}
+        })
+
+    pos = nx.spring_layout(graph, k=0.45, iterations=50, seed=42)
+
+    artist_genres = {}
+    if "is_collab" in df.columns and "all_artists" in df.columns:
+        collab_subset = df[df["is_collab"]]
+        if not collab_subset.empty:
+            exploded = collab_subset.explode("all_artists")
+            grouped = (
+                exploded.groupby(["all_artists", "genre_cluster"])
+                .size()
+                .unstack(fill_value=0)
+            )
+            for art in graph.nodes():
+                if art in grouped.index:
+                    artist_genres[art] = grouped.loc[art].idxmax()
+
+    degrees = dict(graph.degree())
+    nodes_list = []
+    for node, data in graph.nodes(data=True):
+        count = int(data.get("count", 1))
+        deg = int(degrees.get(node, 0))
+        coords = pos.get(node, [0.0, 0.0])
+        dom_genre = artist_genres.get(node, CLUSTER_OTHER)
+        color = CLUSTER_COLORS.get(dom_genre, "#00E5FF")
+
+        nodes_list.append({
+            "id": node,
+            "name": node,
+            "tracks_count": count,
+            "degree": deg,
+            "dominant_genre": dom_genre,
+            "color": color,
+            "x": round(float(coords[0]), 4),
+            "y": round(float(coords[1]), 4),
+        })
+
+    edges_list = []
+    for u, v, data in graph.edges(data=True):
+        edges_list.append({
+            "source": u,
+            "target": v,
+            "weight": int(data.get("weight", 1)),
+        })
+
+    nodes_list.sort(key=lambda n: n["tracks_count"], reverse=True)
+
+    return jsonify({
+        "nodes": nodes_list,
+        "edges": edges_list,
+        "stats": {
+            "total_nodes": len(nodes_list),
+            "total_edges": len(edges_list),
+            "min_collaborations": min_collabs,
+            "focus_artist": focus_artist,
+        }
     })
 
 

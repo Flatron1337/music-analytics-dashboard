@@ -23,6 +23,8 @@ class ApiConstants {
   static const String endpointDeviceCode = '/api/auth/device-code';
   static const String endpointPollToken = '/api/auth/poll-token';
   static const String endpointSyncLikes = '/api/sync-likes';
+  static const String endpointSyncLikesStream = '/api/sync-likes/stream';
   static const String endpointExportPlaylist = '/api/export-playlist';
   static const String endpointArtist = '/api/artist';
+  static const String endpointCollaborationsGraph = '/api/collaborations-graph';
 }

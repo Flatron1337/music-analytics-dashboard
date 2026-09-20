@@ -3,6 +3,8 @@ import 'package:yndex_mobile/data/models/genre_cluster.dart';
 import 'package:yndex_mobile/data/models/overview_stats.dart';
 import 'package:yndex_mobile/data/models/track_item.dart';
 import 'package:yndex_mobile/data/models/timeline_point.dart';
+import 'package:yndex_mobile/data/models/collab_graph.dart';
+import 'package:yndex_mobile/data/models/sync_progress_event.dart';
 import 'package:yndex_mobile/core/utils/formatters.dart';
 
 void main() {
@@ -86,6 +88,95 @@ void main() {
       expect(seg.dominantGenre, 'Dubstep & EDM');
       expect(seg.genres.length, 1);
       expect(seg.genres.first.percent, 40.0);
+    });
+
+    test('CollabGraphData and GraphNode fromJson test', () {
+      final json = {
+        'nodes': [
+          {
+            'id': 'Skrillex',
+            'name': 'Skrillex',
+            'tracks_count': 120,
+            'degree': 14,
+            'dominant_genre': 'Dubstep & EDM',
+            'color': '#00E5FF',
+            'x': 0.25,
+            'y': -0.45,
+          },
+          {
+            'id': 'Diplo',
+            'name': 'Diplo',
+            'tracks_count': 45,
+            'degree': 8,
+            'dominant_genre': 'Dubstep & EDM',
+            'color': '#00E5FF',
+            'x': -0.15,
+            'y': 0.35,
+          }
+        ],
+        'edges': [
+          {
+            'source': 'Skrillex',
+            'target': 'Diplo',
+            'weight': 3,
+          }
+        ],
+        'stats': {
+          'total_nodes': 2,
+          'total_edges': 1,
+          'min_collaborations': 1,
+          'focus_artist': null,
+        }
+      };
+
+      final graph = CollabGraphData.fromJson(json);
+      expect(graph.nodes.length, 2);
+      expect(graph.edges.length, 1);
+      expect(graph.totalNodes, 2);
+      expect(graph.totalEdges, 1);
+
+      final node = graph.nodes.first;
+      expect(node.id, 'Skrillex');
+      expect(node.name, 'Skrillex');
+      expect(node.tracksCount, 120);
+      expect(node.degree, 14);
+      expect(node.x, 0.25);
+      expect(node.y, -0.45);
+
+      final edge = graph.edges.first;
+      expect(edge.source, 'Skrillex');
+      expect(edge.target, 'Diplo');
+      expect(edge.weight, 3);
+    });
+
+    test('SyncProgressEvent fromJson test', () {
+      final progressJson = {
+        'type': 'progress',
+        'stage': 'fetching',
+        'percent': 45,
+        'current': 45,
+        'total': 100,
+        'message': 'Загрузка метаданных...',
+      };
+      final progressEvent = SyncProgressEvent.fromJson(progressJson);
+      expect(progressEvent.type, 'progress');
+      expect(progressEvent.stage, 'fetching');
+      expect(progressEvent.percent, 45);
+      expect(progressEvent.isComplete, false);
+      expect(progressEvent.isError, false);
+
+      final completeJson = {
+        'type': 'complete',
+        'stage': 'done',
+        'percent': 100,
+        'current': 9006,
+        'total': 9006,
+        'tracks_synced': 9006,
+        'message': 'Синхронизировано 9,006 треков!',
+      };
+      final completeEvent = SyncProgressEvent.fromJson(completeJson);
+      expect(completeEvent.isComplete, true);
+      expect(completeEvent.tracksSynced, 9006);
     });
   });
 }
