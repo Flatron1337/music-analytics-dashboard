@@ -9,3 +9,5 @@ venv/
 *.sqlite-shm
 *.sqlite-wal
 *.pkl
+.yandex_token
+*.token

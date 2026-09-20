@@ -421,11 +421,14 @@ def sync_likes():
     likes_df["genre_cluster"] = genres
     _df_cache = likes_df
 
-    # Persist synced collection to disk so it survives server restarts
+    # Persist synced collection and token to disk so it survives server restarts
     try:
         likes_df.to_pickle(SYNCED_CACHE_PATH)
+        token_file = os.path.join(os.path.dirname(__file__), ".yandex_token")
+        with open(token_file, "w", encoding="utf-8") as f:
+            f.write(token)
     except Exception as e:
-        print(f"⚠️ Не удалось сохранить кэш синхронизации на диск: {e}", flush=True)
+        print(f"⚠️ Не удалось сохранить кэш синхронизации/токен на диск: {e}", flush=True)
 
     return jsonify({
         "success": True,

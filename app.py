@@ -31,10 +31,54 @@ from yandex_api import (
     poll_yandex_device_token,
     request_yandex_device_code,
 )
+import streamlit.components.v1 as components
+
+TOKEN_CACHE_FILE = os.path.join(os.path.dirname(__file__), ".yandex_token")
+SYNCED_LIKES_CACHE = os.path.join(os.path.dirname(__file__), "synced_likes.pkl")
 
 DEFAULT_FILE_PATH = os.path.join(
     os.path.dirname(__file__), "Мне нравится_965180470_20260915_213456.txt"
 )
+
+
+def sync_browser_storage(token: Optional[str] = None) -> None:
+    """Синхронизирует токен с localStorage браузера для авто-входа при закрытии/открытии вкладок."""
+    if token:
+        js = f"""
+        <script>
+            try {{
+                localStorage.setItem('yandex_music_token', '{token}');
+            }} catch (e) {{}}
+        </script>
+        """
+        components.html(js, height=0, width=0)
+    else:
+        js = """
+        <script>
+            try {
+                const saved = localStorage.getItem('yandex_music_token');
+                const urlParams = new URLSearchParams(window.parent.location.search);
+                if (saved && !urlParams.get('token')) {
+                    urlParams.set('token', saved);
+                    window.parent.location.search = urlParams.toString();
+                }
+            } catch (e) {}
+        </script>
+        """
+        components.html(js, height=0, width=0)
+
+
+def clear_browser_storage() -> None:
+    """Очищает токен из localStorage браузера при выходе."""
+    js = """
+    <script>
+        try {
+            localStorage.removeItem('yandex_music_token');
+        } catch (e) {}
+    </script>
+    """
+    components.html(js, height=0, width=0)
+
 
 st.set_page_config(
     page_title="Музыкальный дашборд | Анализ плейлиста",
@@ -170,6 +214,51 @@ def render_network_html(graph: nx.Graph, height_px: int = 650) -> str:
 
 
 def main() -> None:
+    # 0. Автоматическое восстановление сохранённой авторизации при открытии новой вкладки
+    if "yandex_client" not in st.session_state:
+        token_candidate = None
+        # Способ 1: Токен из адресной строки (?token=...)
+        if "token" in st.query_params:
+            p_val = st.query_params.get("token")
+            if p_val and str(p_val).strip():
+                token_candidate = str(p_val).strip()
+
+        # Способ 2: Токен из файла на сервере (.yandex_token)
+        if not token_candidate and os.path.exists(TOKEN_CACHE_FILE):
+            try:
+                with open(TOKEN_CACHE_FILE, "r", encoding="utf-8") as f:
+                    f_tok = f.read().strip()
+                    if f_tok:
+                        token_candidate = f_tok
+            except Exception:
+                token_candidate = None
+
+        if token_candidate:
+            client, user_info, err = login_yandex(token_candidate)
+            if client and user_info:
+                st.session_state["yandex_client"] = client
+                st.session_state["yandex_user"] = user_info
+                st.session_state["yandex_token"] = token_candidate
+                st.query_params["token"] = token_candidate
+                try:
+                    with open(TOKEN_CACHE_FILE, "w", encoding="utf-8") as f:
+                        f.write(token_candidate)
+                except Exception:
+                    pass
+                sync_browser_storage(token_candidate)
+            else:
+                if "token" in st.query_params:
+                    del st.query_params["token"]
+                if os.path.exists(TOKEN_CACHE_FILE):
+                    try:
+                        os.remove(TOKEN_CACHE_FILE)
+                    except Exception:
+                        pass
+                clear_browser_storage()
+        else:
+            # Способ 3: Проверяем localStorage браузера (если вкладка открыта по прямой ссылке без параметров)
+            sync_browser_storage(None)
+
     st.sidebar.title("🎛️ Источник данных")
 
     has_active_yandex = "yandex_client" in st.session_state
@@ -217,7 +306,15 @@ def main() -> None:
                         else:
                             st.session_state["yandex_client"] = client
                             st.session_state["yandex_user"] = user_info
+                            st.session_state["yandex_token"] = token
                             st.session_state.pop("device_auth_data", None)
+                            st.query_params["token"] = token
+                            try:
+                                with open(TOKEN_CACHE_FILE, "w", encoding="utf-8") as f:
+                                    f.write(token)
+                            except Exception:
+                                pass
+                            sync_browser_storage(token)
                             st.sidebar.success(f"Добро пожаловать, {user_info['full_name']}!")
                             st.rerun()
                     else:
@@ -237,14 +334,23 @@ def main() -> None:
                 )
                 if st.button("Войти по токену", use_container_width=True):
                     if token_input.strip():
+                        t_clean = token_input.strip()
                         with st.status("Проверка токена..."):
-                            client, user_info, err = login_yandex(token_input.strip())
+                            client, user_info, err = login_yandex(t_clean)
                         if err:
                             st.error(err)
                         else:
                             st.session_state["yandex_client"] = client
                             st.session_state["yandex_user"] = user_info
+                            st.session_state["yandex_token"] = t_clean
                             st.session_state.pop("device_auth_data", None)
+                            st.query_params["token"] = t_clean
+                            try:
+                                with open(TOKEN_CACHE_FILE, "w", encoding="utf-8") as f:
+                                    f.write(t_clean)
+                            except Exception:
+                                pass
+                            sync_browser_storage(t_clean)
                             st.rerun()
                     else:
                         st.warning("Пожалуйста, введите токен.")
@@ -273,8 +379,27 @@ def main() -> None:
             if col_btn_logout.button("🚪 Выйти", help="Выйти из профиля", use_container_width=True):
                 st.session_state.pop("yandex_client", None)
                 st.session_state.pop("yandex_user", None)
+                st.session_state.pop("yandex_token", None)
                 st.session_state.pop("yandex_likes_df", None)
+                if "token" in st.query_params:
+                    del st.query_params["token"]
+                if os.path.exists(TOKEN_CACHE_FILE):
+                    try:
+                        os.remove(TOKEN_CACHE_FILE)
+                    except Exception:
+                        pass
+                clear_browser_storage()
                 st.rerun()
+
+            # Быстрая загрузка из кэша (synced_likes.pkl), если треки уже сохранены на сервере
+            if "yandex_likes_df" not in st.session_state and not sync_btn:
+                if os.path.exists(SYNCED_LIKES_CACHE):
+                    try:
+                        df_cached = pd.read_pickle(SYNCED_LIKES_CACHE)
+                        if df_cached is not None and not df_cached.empty:
+                            st.session_state["yandex_likes_df"] = df_cached
+                    except Exception:
+                        pass
 
             if sync_btn or "yandex_likes_df" not in st.session_state:
                 prog_bar = st.sidebar.progress(0)
@@ -291,11 +416,16 @@ def main() -> None:
 
                 if not df_loaded.empty:
                     st.session_state["yandex_likes_df"] = df_loaded
+                    try:
+                        df_loaded.to_pickle(SYNCED_LIKES_CACHE)
+                    except Exception:
+                        pass
                     st.sidebar.success(f"Синхронизировано: {len(df_loaded):,} треков!")
 
             if "yandex_likes_df" in st.session_state:
                 df_raw = st.session_state["yandex_likes_df"]
                 source_name = f"Яндекс Музыка ({user_info['login']})"
+
 
     else:
         st.sidebar.markdown("---")
