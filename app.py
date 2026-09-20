@@ -262,7 +262,7 @@ def main() -> None:
     st.sidebar.title("🎛️ Источник данных")
 
     has_active_yandex = "yandex_client" in st.session_state
-    default_source_idx = 0 if has_active_yandex else 1
+    default_source_idx = 0
 
     source_mode = st.sidebar.radio(
         "Режим работы:",
@@ -355,10 +355,9 @@ def main() -> None:
                     else:
                         st.warning("Пожалуйста, введите токен.")
 
-            if os.path.exists(DEFAULT_FILE_PATH):
-                st.info("💡 Войдите в свой Яндекс ID через кнопку выше, чтобы загрузить свежие треки в реальном времени. Сейчас открыта сохраненная коллекция.")
-                df_raw = get_cached_playlist_from_file(DEFAULT_FILE_PATH)
-                source_name = os.path.basename(DEFAULT_FILE_PATH)
+            st.markdown("### 👋 Добро пожаловать в Музыкальный Дашборд")
+            st.info("💡 Войдите в свой **Яндекс ID** в боковой панели слева (по коду через ya.ru/device или OAuth-токену), чтобы загрузить актуальную медиатеку.")
+            df_raw = pd.DataFrame()
         else:
             user_info = st.session_state["yandex_user"]
             client = st.session_state["yandex_client"]
@@ -439,17 +438,12 @@ def main() -> None:
             file_content = uploaded_file.getvalue().decode("utf-8", errors="replace")
             df_raw = get_cached_playlist_from_text(file_content)
             source_name = uploaded_file.name
-        elif os.path.exists(DEFAULT_FILE_PATH):
-            df_raw = get_cached_playlist_from_file(DEFAULT_FILE_PATH)
-            source_name = os.path.basename(DEFAULT_FILE_PATH)
         else:
-            st.error(
-                f"Файл по умолчанию не найден: {DEFAULT_FILE_PATH}. Пожалуйста, загрузите .txt файл через боковую панель."
-            )
-            st.stop()
+            st.markdown("### 📁 Анализ локального плейлиста")
+            st.info("Загрузите текстовый файл с экспортом плейлиста (.txt) через боковую панель слева.")
+            df_raw = pd.DataFrame()
 
     if df_raw.empty:
-        st.warning("В файле не найдено корректных записей треков.")
         st.stop()
 
     chrono_mode = st.sidebar.radio(
