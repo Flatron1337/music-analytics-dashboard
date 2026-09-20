@@ -220,7 +220,7 @@ def create_remote_playlist(
     title: str,
     tracks: List[Dict[str, Any]],
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
-    batch_size: int = 400,
+    batch_size: int = 250,
 ) -> Tuple[bool, str, Optional[str]]:
     """Создаёт плейлист в аккаунте Яндекс Музыки и наполняет его треками."""
     if not tracks:
@@ -230,7 +230,65 @@ def create_remote_playlist(
         if progress_callback:
             progress_callback(0, 100, f"Создание плейлиста '{title}' в Яндекс Музыке...")
 
-        # Создаём пустой публичный плейлист
+        # Вспомогательная функция очистки числовых ID
+        def _clean_id(val: Any) -> Optional[str]:
+            if val is None or pd.isna(val):
+                return None
+            s = str(val).strip()
+            if not s or s.lower() in ("nan", "none"):
+                return None
+            if s.endswith(".0"):
+                s = s[:-2]
+            return s if s.isdigit() and int(s) > 0 else None
+
+        # 1. Отбираем треки с валидными track_id и проверяем наличие album_id
+        items_with_album = []
+        missing_album_track_ids = []
+
+        for t in tracks:
+            t_id = _clean_id(t.get("track_id"))
+            if not t_id:
+                continue
+            alb_id = _clean_id(t.get("album_id"))
+            if alb_id:
+                items_with_album.append({"id": t_id, "album_id": alb_id})
+            else:
+                missing_album_track_ids.append(t_id)
+
+        # 2. Если есть треки без album_id, пробуем восстановить их альбомы через клиент Яндекса
+        recovered_albums = {}
+        if missing_album_track_ids:
+            chunk_size = 100
+            for i in range(0, len(missing_album_track_ids), chunk_size):
+                chunk = missing_album_track_ids[i : i + chunk_size]
+                try:
+                    fetched = client.tracks(chunk)
+                    for f_t in fetched:
+                        if f_t and f_t.albums and len(f_t.albums) > 0 and f_t.albums[0].id:
+                            f_alb = _clean_id(f_t.albums[0].id)
+                            if f_alb:
+                                recovered_albums[str(f_t.id)] = f_alb
+                except Exception:
+                    pass
+
+        # 3. Собираем итоговый список треков, строго исключая треки без album_id
+        # (иначе Яндекс возвращает 'wrong-json' из-за пустого значения albumId)
+        final_valid_items = list(items_with_album)
+        for t_id in missing_album_track_ids:
+            rec_alb = recovered_albums.get(t_id)
+            if rec_alb:
+                final_valid_items.append({"id": t_id, "album_id": rec_alb})
+
+        if not final_valid_items:
+            return (
+                False,
+                "В списке отсутствуют треки с доступными альбомами (возможно, треки удалены из каталога Яндекс Музыки).",
+                None,
+            )
+
+        skipped_count = len(tracks) - len(final_valid_items)
+
+        # 4. Создаём пустой публичный плейлист
         playlist = client.users_playlists_create(title=title, visibility="public")
         if not playlist:
             return False, "Не удалось создать плейлист на сервере Яндекса.", None
@@ -239,33 +297,15 @@ def create_remote_playlist(
         user_id = client.account_uid
         revision = playlist.revision or 1
 
-        # Отбираем валидные треки с track_id
-        valid_tracks = [
-            t
-            for t in tracks
-            if t.get("track_id") and str(t["track_id"]).isdigit()
-        ]
+        total_tracks = len(final_valid_items)
+        inserted_count = 0
 
-        if not valid_tracks:
-            return (
-                False,
-                "В списке отсутствуют прямые ID треков Яндекс Музыки (возможно, треки загружены из текстового файла, а не через API).",
-                None,
-            )
-
-        total_tracks = len(valid_tracks)
-
-        # Пакетное добавление треков через Difference
+        # 5. Пакетное добавление треков через Difference
         for start_idx in range(0, total_tracks, batch_size):
             end_idx = min(start_idx + batch_size, total_tracks)
-            batch = valid_tracks[start_idx:end_idx]
+            batch = final_valid_items[start_idx:end_idx]
 
-            items_to_insert = []
-            for tr in batch:
-                alb_id = tr.get("album_id") or ""
-                items_to_insert.append({"id": tr["track_id"], "album_id": alb_id})
-
-            diff = Difference().add_insert(at=start_idx, tracks=items_to_insert)
+            diff = Difference().add_insert(at=inserted_count, tracks=batch)
 
             if progress_callback:
                 pct = int((start_idx / total_tracks) * 100)
@@ -283,12 +323,17 @@ def create_remote_playlist(
             )
             if res and res.revision:
                 revision = res.revision
+            inserted_count += len(batch)
 
         playlist_url = f"https://music.yandex.ru/users/{user_id}/playlists/{kind}"
         if progress_callback:
             progress_callback(100, 100, "Плейлист готов!")
 
-        return True, f"Плейлист '{title}' успешно создан ({total_tracks} треков)!", playlist_url
+        msg = f"Плейлист '{title}' успешно создан ({inserted_count} треков)!"
+        if skipped_count > 0:
+            msg += f" (Пропущено {skipped_count} заблокированных/удалённых треков)"
+
+        return True, msg, playlist_url
 
     except Exception as err:
         return False, f"Ошибка при создании плейлиста в Яндекс Музыке: {err}", None
