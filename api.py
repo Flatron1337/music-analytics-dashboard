@@ -13,7 +13,7 @@ from flask_cors import CORS
 import networkx as nx
 import pandas as pd
 
-from ai_genre_classifier import AIGenreClassifier
+from ai_genre_classifier import AIGenreClassifier, _load_keys
 from genre_classifier import (
     CLUSTER_DUBSTEP_EDM,
     CLUSTER_HEAVY_METAL,
@@ -635,6 +635,22 @@ def enrich_genres_status():
     except Exception as e:
         print(f"⚠️ Ошибка получения статуса AI: {e}", flush=True)
 
+    # Dynamic key reload from environment or local config
+    if not _ai_classifier.gemini_key or not _ai_classifier.groq_key:
+        g_k, q_k = _load_keys()
+        if not _ai_classifier.gemini_key and g_k:
+            _ai_classifier.gemini_key = g_k
+        if not _ai_classifier.groq_key and q_k:
+            _ai_classifier.groq_key = q_k
+
+    # Header / query param override support
+    custom_gemini = request.headers.get("X-Gemini-Key") or request.args.get("gemini_key")
+    custom_groq = request.headers.get("X-Groq-Key") or request.args.get("groq_key")
+    if custom_gemini:
+        _ai_classifier.gemini_key = custom_gemini.strip()
+    if custom_groq:
+        _ai_classifier.groq_key = custom_groq.strip()
+
     has_gemini = bool(_ai_classifier.gemini_key)
     has_groq = bool(_ai_classifier.groq_key)
 
@@ -650,6 +666,21 @@ def enrich_genres_status():
 @app.route("/api/enrich-genres/stream", methods=["GET", "POST"])
 def enrich_genres_stream():
     cache_db = _classifier.db_path
+
+    # Dynamic key reload & custom key overrides
+    if not _ai_classifier.gemini_key or not _ai_classifier.groq_key:
+        g_k, q_k = _load_keys()
+        if not _ai_classifier.gemini_key and g_k:
+            _ai_classifier.gemini_key = g_k
+        if not _ai_classifier.groq_key and q_k:
+            _ai_classifier.groq_key = q_k
+
+    custom_gemini = request.headers.get("X-Gemini-Key") or request.args.get("gemini_key")
+    custom_groq = request.headers.get("X-Groq-Key") or request.args.get("groq_key")
+    if custom_gemini:
+        _ai_classifier.gemini_key = custom_gemini.strip()
+    if custom_groq:
+        _ai_classifier.groq_key = custom_groq.strip()
 
     def generate_events():
         q: queue.Queue = queue.Queue()
