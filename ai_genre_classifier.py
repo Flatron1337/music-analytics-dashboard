@@ -25,7 +25,7 @@ def _load_keys() -> Tuple[str, str]:
     return gemini_key, groq_key
 
 
-GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_MODELS = ["gemini-3.1-flash-lite", "gemini-3.6-flash"]
 GROQ_MODEL = "qwen/qwen3.8-27b"
 
 CLUSTER_HEAVY_METAL = "Heavy & Metal"
@@ -84,9 +84,7 @@ class AIGenreClassifier:
         if not self.gemini_key:
             raise ValueError("GEMINI_API_KEY is not configured")
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={self.gemini_key}"
         user_prompt = f"{SYSTEM_PROMPT}\n\nInput artists:\n{json.dumps(items, ensure_ascii=False)}"
-
         payload = {
             "contents": [{"parts": [{"text": user_prompt}]}],
             "generationConfig": {
@@ -95,22 +93,30 @@ class AIGenreClassifier:
             },
         }
 
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "MusicClassifier/3.0",
-            },
-        )
+        last_err = None
+        for model in GEMINI_MODELS:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.gemini_key}"
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/json",
+                        "User-Agent": "MusicClassifier/3.0",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    data = json.loads(resp.read().decode("utf-8", errors="replace"))
+                    candidates = data.get("candidates", [])
+                    if not candidates:
+                        raise ValueError(f"Gemini {model} returned empty candidates")
+                    text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                    return self._parse_json_result(text)
+            except Exception as e:
+                last_err = e
+                continue
 
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8", errors="replace"))
-            candidates = data.get("candidates", [])
-            if not candidates:
-                raise ValueError("Gemini returned empty candidates")
-            text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
-            return self._parse_json_result(text)
+        raise last_err or RuntimeError("All Gemini models failed")
 
     def _call_groq_batch(self, items: List[Dict[str, Any]], timeout: float = 20.0) -> List[Dict[str, Any]]:
         if not self.groq_key:
