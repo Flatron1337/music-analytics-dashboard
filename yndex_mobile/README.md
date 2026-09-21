@@ -1,17 +1,166 @@
-# yndex_mobile
+<div align="center">
+  <h1>📱 Yandex Music Analytics Mobile & Web App 📱</h1>
+  <p><strong>Кроссплатформенное Flutter-приложение для интерактивной аналитики медиатеки Яндекс Музыки: живая синхронизация, 9:16 Story генератор, граф соавторов и экспорт умных плейлистов.</strong></p>
 
-A new Flutter project.
+  <p>
+    <a href="#-обзор">Обзор</a> •
+    <a href="#-ключевые-возможности">Возможности</a> •
+    <a href="#-скриншоты-и-интерфейс">Интерфейс</a> •
+    <a href="#-стек-технологий">Стек</a> •
+    <a href="#-установка-и-запуск">Запуск</a>
+  </p>
 
-## Getting Started
+  <a href="https://github.com/Flatron1337"><img src="https://img.shields.io/badge/GitHub-Flatron1337-181717?style=for-the-badge&logo=github&logoColor=white" alt="Профиль GitHub" /></a>
 
-This project is a starting point for a Flutter application.
+  ![Flutter Version](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)
+  ![Dart Version](https://img.shields.io/badge/Dart-3.x-0175C2?logo=dart&logoColor=white)
+  ![Platform](https://img.shields.io/badge/Platforms-Android%20%7C%20Web%20%7C%20iOS%20%7C%20Desktop-4CAF50)
+  ![Design](https://img.shields.io/badge/Theme-Dark%20Neon%20Cyberpunk-FFB300)
+  ![License](https://img.shields.io/badge/License-MIT-green)
+</div>
 
-A few resources to get you started if this is your first Flutter project:
+---
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## 📖 Обзор
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+**Yandex Music Analytics App** (`yndex_mobile`) — это клиентское мобильное и PWA веб-приложение, созданное на фреймворке **Flutter**. Приложение подключается к бэкенду аналитики и предоставляет слушателю наглядные интерактивные данные о любимой музыке: хронометраж, баланс сольных треков и коллабораций, таймлайн добавления музыки, карту связей артистов и генерацию карточек Story (9:16) для соцсетей.
+
+---
+
+## ✨ Ключевые возможности
+
+### 📊 Музыкальный обзор (Overview)
+- **Сводная статистика:** Подсчет общего количества треков, уникальных артистов, суммарного времени прослушивания и средней длины трека.
+- **Соло vs Коллаборации:** Индикатор процента фитов в вашей медиатеке.
+- **Топ-10 исполнителей:** Рейтинг артистов с наибольшим количеством сохраненных композиций.
+
+### ⚡ Жанровая кластеризация (Genres)
+- **Круговые диаграммы и срезы (`fl_chart`):** Наглядное распределение треков по ключевым жанровым кластерам (*Dubstep & EDM*, *Heavy & Metal*, *Phonk & Memphis*, *Hip-Hop & Trap*, *Rock & Alternative*, *Other*).
+- **Карточки кластеров:** Быстрая фильтрация медиатеки по выбранному музыкальному направлению.
+
+### 📈 Временная шкала (Timeline)
+- **Хронология вкусов:** Динамика добавления треков по годам и месяцам.
+- **Интерактивные графики активности:** Наглядное отображение музыкальных периодов вашей жизни.
+
+### 🎵 Каталог треков (Tracks Browser)
+- **Быстрый поиск и фильтрация:** Поиск по артистам, названиям и жанрам.
+- **Обложки высокого разрешения:** Кэширование и загрузка обложек альбомов из Яндекс Музыки.
+- **Пагинация:** Плавная подгрузка сотен и тысяч треков без просадок FPS.
+
+### 🕸 Интерактивный граф связей (Collab Graph)
+- **Визуализация соавторства:** Карта фитов и музыкальных коллабораций ваших артистов на кастомном Canvas.
+- **Физика узлов и интерактивность:** Приближение, перемещение, перетаскивание узлов и фильтрация по минимальному числу совместных треков.
+- **Детали артиста:** Модальное окно с подробным списком всех фитов и партнеров выбранного музыканта.
+
+### 📸 Персональная Story (9:16) с экспортом
+- **Генерация постера для Stories (VK / Instagram):** Индивидуальный музыкальный архетип (*«Электронный Рейвер»*, *«Повелитель Тяжести»* и др.), статистика и топ-3 артиста.
+- **Кроссплатформенное сохранение:** Автоматическое скачивание PNG высокого разрешения в папку **«Загрузки»** устройства (через HTML Blob в Web/Chrome и нативный доступ в Android).
+
+### 🪄 Экспорт «Умных плейлистов» прямо в Яндекс Музыку
+- **Пресеты в 1 тап:**
+  - ⚡ *«Жанровый кластер»* (Чистый Phonk, Dubstep или Metal).
+  - 🤝 *«Фитотека»* (Все треки с коллаборациями).
+  - 💎 *«Скрытые жемчужины»* (Редкие треки авторов с 1–2 лайками).
+  - ⏳ *«Золотая эра»* (Первые 100 треков вашей коллекции).
+- **Прямое создание:** Плейлист сразу появляется в вашем профиле Яндекс Музыки.
+
+### 🔄 Потоковая синхронизация (SSE)
+- **Живой индикатор:** Трансляция статуса синхронизации в реальном времени с выводом прогресса загрузки каждого блока треков.
+- **Персистентная авторизация:** Сохранение токена сессии через `shared_preferences` и синхронизация состояния.
+
+---
+
+## 🛠 Стек технологий
+
+- **Фреймворк:** Flutter `^3.12` / `3.x`
+- **Язык программирования:** Dart `^3.12` / `3.x`
+- **Графики и визуализация:** `fl_chart ^0.68.0`, кастомный `CustomPainter`
+- **Сетевой клиент:** `http ^1.2.2` (стриминг Server-Sent Events через `streamedResponse`)
+- **Локальное хранилище:** `shared_preferences ^2.3.2`
+- **Типографика:** `google_fonts ^6.2.1` (`Inter`, `JetBrains Mono`)
+- **Внешние ссылки:** `url_launcher ^6.3.0`
+- **Форматирование дат и чисел:** `intl ^0.19.0`
+- **Кроссплатформенный экспорт:** Условный импорт `dart:html` / `dart:io` для сохранения медиа
+
+---
+
+## 🚀 Установка и запуск
+
+### Требования
+- Flutter SDK **3.12.0** или выше
+- Dart SDK **3.12.0** или выше
+- Google Chrome (для запуска Web) или эмулятор Android / физическое устройство
+
+### 1. Переход в папку приложения
+```bash
+cd yndex_mobile
+```
+
+### 2. Загрузка зависимостей
+```bash
+flutter pub get
+```
+
+### 3. Запуск статического анализа и тестов
+```bash
+flutter analyze
+flutter test
+```
+
+### 4. Запуск приложения
+
+#### В браузере (Web / PWA):
+```bash
+flutter run -d chrome
+```
+
+#### На Android устройстве:
+```bash
+flutter run -d android
+```
+
+#### Сборка релизной веб-версии:
+```bash
+flutter build web --release
+```
+
+---
+
+## 🏗 Структура проекта
+
+```text
+yndex_mobile/
+├── lib/
+│   ├── core/
+│   │   ├── constants/       # API endpoints, базовые URL и строковые константы
+│   │   ├── theme/           # Цветовая палитра AppColors, шрифты и стили кнопок
+│   │   └── utils/           # Форматтеры времени, чисел и кроссплатформенный story_saver
+│   ├── data/
+│   │   ├── models/          # Модели данных (OverviewStats, TrackItem, GenreCluster, CollabGraph)
+│   │   └── services/        # ApiService (REST API клиент и SSE-стриминг)
+│   ├── ui/
+│   │   ├── screens/         # Главный экран (MainNavigationScreen) с нижней панелью
+│   │   └── widgets/         # Карточки аналитики, виджет Story, диалоги и граф фитов
+│   └── main.dart            # Точка входа в приложение
+└── test/
+    └── widget_test.dart     # Модульные и интеграционные тесты моделей и форматтеров
+```
+
+---
+
+## ⚙️ Конфигурация API
+
+По умолчанию приложение настроено на автоматическую работу как с облачным бэкендом на Render, так и с локальным сервером.
+
+Базовый URL настраивается в [lib/core/constants/api_constants.dart](lib/core/constants/api_constants.dart):
+```dart
+static const String baseUrl = 'https://music-analytics-dashboard.onrender.com';
+// Для локальной разработки:
+// static const String baseUrl = 'http://127.0.0.1:10000';
+```
+
+---
+
+## 📄 Лицензия
+
+Распространяется под лицензией **MIT**. Подробности в корневом файле [LICENSE](../LICENSE).
