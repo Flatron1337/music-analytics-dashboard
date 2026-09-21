@@ -4,6 +4,7 @@ import os
 import queue
 import sys
 import threading
+import time
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
@@ -12,6 +13,7 @@ from flask_cors import CORS
 import networkx as nx
 import pandas as pd
 
+from ai_genre_classifier import AIGenreClassifier
 from genre_classifier import (
     CLUSTER_DUBSTEP_EDM,
     CLUSTER_HEAVY_METAL,
@@ -41,6 +43,7 @@ SYNCED_CACHE_PATH = os.path.join(
 # Global in-memory cache
 _df_cache: Optional[pd.DataFrame] = None
 _classifier = GenreClassifier()
+_ai_classifier = AIGenreClassifier()
 
 CLUSTER_COLORS: Dict[str, str] = {
     CLUSTER_DUBSTEP_EDM: "#00E5FF",      # Cyber Cyan
@@ -130,6 +133,8 @@ def index():
             "/api/export-playlist",
             "/api/artist",
             "/api/collaborations-graph",
+            "/api/enrich-genres/status",
+            "/api/enrich-genres/stream",
         ],
     })
 
@@ -595,6 +600,170 @@ def sync_likes_stream():
         while True:
             try:
                 item = q.get(timeout=20)
+                if item is None:
+                    break
+                event_name = item.get("type", "message")
+                data_str = json.dumps(item, ensure_ascii=False)
+                yield f"event: {event_name}\ndata: {data_str}\n\n"
+            except queue.Empty:
+                yield ": keepalive\n\n"
+
+    return Response(
+        generate_events(),
+        mimetype="text/event-stream",
+        headers={
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
+        }
+    )
+
+
+@app.route("/api/enrich-genres/status", methods=["GET"])
+def enrich_genres_status():
+    cache_db = _classifier.db_path
+    unresolved_count = 0
+    try:
+        import sqlite3
+        with sqlite3.connect(cache_db, timeout=10.0) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT count(*) FROM artist_cache WHERE source = 'unresolved'")
+            row = cur.fetchone()
+            unresolved_count = row[0] if row else 0
+    except Exception as e:
+        print(f"⚠️ Ошибка получения статуса AI: {e}", flush=True)
+
+    has_gemini = bool(_ai_classifier.gemini_key)
+    has_groq = bool(_ai_classifier.groq_key)
+
+    return jsonify({
+        "success": True,
+        "unresolved_count": unresolved_count,
+        "is_configured": has_gemini or has_groq,
+        "has_gemini": has_gemini,
+        "has_groq": has_groq,
+    })
+
+
+@app.route("/api/enrich-genres/stream", methods=["GET", "POST"])
+def enrich_genres_stream():
+    cache_db = _classifier.db_path
+
+    def generate_events():
+        q: queue.Queue = queue.Queue()
+
+        def worker():
+            try:
+                import sqlite3
+                targets = []
+                with sqlite3.connect(cache_db, timeout=20.0) as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT artist_key, artist_name FROM artist_cache WHERE source = 'unresolved'")
+                    targets = cur.fetchall()
+
+                total = len(targets)
+                if total == 0:
+                    q.put({
+                        "type": "done",
+                        "percent": 100,
+                        "current": 0,
+                        "total": 0,
+                        "message": "Все артисты уже классифицированы нейросетью!"
+                    })
+                    return
+
+                q.put({
+                    "type": "progress",
+                    "percent": 2,
+                    "current": 0,
+                    "total": total,
+                    "message": f"Найдено {total:,} артистов для AI-анализа. Запуск..."
+                })
+
+                artist_tracks = {}
+                df = get_dataset()
+                if not df.empty and "all_artists" in df.columns and "title_raw" in df.columns:
+                    for _, r in df.iterrows():
+                        t = str(r.get("title_raw", "")).strip()
+                        arts = r.get("all_artists", [])
+                        if isinstance(arts, list):
+                            for a in arts:
+                                k = str(a).strip().lower()
+                                if k:
+                                    artist_tracks.setdefault(k, []).append(t)
+
+                batch_size = 35
+                processed = 0
+                saved_total = 0
+
+                for i in range(0, total, batch_size):
+                    chunk = targets[i : i + batch_size]
+                    items_payload = []
+                    for k, name in chunk:
+                        trks = artist_tracks.get(k, [])
+                        items_payload.append({
+                            "artist": name,
+                            "tracks": trks[:4] if trks else [],
+                        })
+
+                    pct = int(5 + ((i / total) * 90))
+                    q.put({
+                        "type": "progress",
+                        "percent": pct,
+                        "current": processed,
+                        "total": total,
+                        "message": f"AI-анализ: обработано {processed}/{total} артистов..."
+                    })
+
+                    try:
+                        results, provider = _ai_classifier.classify_batch(items_payload)
+                        saved = _ai_classifier.save_ai_results_to_sqlite(cache_db, results)
+                        saved_total += saved
+                    except Exception as ex:
+                        print(f"⚠️ Ошибка пакета AI: {ex}", flush=True)
+
+                    processed += len(chunk)
+                    time.sleep(1.2)
+
+                _classifier.reload_memory_cache()
+                global _df_cache
+                if _df_cache is not None and not _df_cache.empty:
+                    artists_raw = _df_cache["artist_raw"].tolist()
+                    titles_raw = _df_cache["title_raw"].tolist()
+                    all_artists_list = _df_cache["all_artists"].tolist()
+                    _df_cache["genre_cluster"] = [
+                        _classifier.classify_track(a, t, aa, allow_network=False)[0]
+                        for a, t, aa in zip(artists_raw, titles_raw, all_artists_list)
+                    ]
+                    try:
+                        _df_cache.to_pickle(SYNCED_CACHE_PATH)
+                    except Exception:
+                        pass
+
+                q.put({
+                    "type": "done",
+                    "percent": 100,
+                    "current": total,
+                    "total": total,
+                    "total_enriched": saved_total,
+                    "message": f"AI-классификация завершена! Обработано {saved_total} артистов, медиатека обновлена."
+                })
+            except Exception as e:
+                q.put({
+                    "type": "error",
+                    "percent": 0,
+                    "message": f"Ошибка AI-классификации: {e}"
+                })
+            finally:
+                q.put(None)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+        while True:
+            try:
+                item = q.get(timeout=25)
                 if item is None:
                     break
                 event_name = item.get("type", "message")

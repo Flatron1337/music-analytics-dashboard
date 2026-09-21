@@ -470,7 +470,8 @@ class GenreClassifier:
             )
             conn.commit()
 
-    def _load_memory_cache(self) -> None:
+    def reload_memory_cache(self) -> int:
+        count = 0
         try:
             with sqlite3.connect(self.db_path, timeout=30.0) as conn:
                 cursor = conn.cursor()
@@ -478,8 +479,13 @@ class GenreClassifier:
                 for key, cluster, tags_json in cursor.fetchall():
                     tags = json.loads(tags_json) if tags_json else []
                     self._mem_cache[key] = (cluster, tags)
+                    count += 1
         except Exception:
             pass
+        return count
+
+    def _load_memory_cache(self) -> None:
+        self.reload_memory_cache()
 
     def get_cached_artist(self, artist_name: str) -> Optional[Tuple[str, List[str]]]:
         key = artist_name.strip().lower()

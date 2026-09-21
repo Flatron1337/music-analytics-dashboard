@@ -11,3 +11,5 @@ venv/
 *.pkl
 .yandex_token
 *.token
+.ai_keys.json
+.env

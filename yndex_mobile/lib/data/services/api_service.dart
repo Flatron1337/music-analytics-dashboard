@@ -330,4 +330,67 @@ class ApiService {
       client.close();
     }
   }
+
+  Future<Map<String, dynamic>> getEnrichStatus() async {
+    try {
+      final host = await baseUrl;
+      final url = Uri.parse('$host${ApiConstants.endpointEnrichGenresStatus}');
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        return jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return {'unresolved_count': 0, 'is_configured': false};
+  }
+
+  Stream<SyncProgressEvent> streamAiEnrichment() async* {
+    final host = await baseUrl;
+    final url = Uri.parse('$host${ApiConstants.endpointEnrichGenresStream}');
+    final client = http.Client();
+
+    try {
+      final request = http.Request('GET', url);
+      request.headers['Accept'] = 'text/event-stream';
+      request.headers['Cache-Control'] = 'no-cache';
+
+      final streamedResponse = await client.send(request).timeout(const Duration(seconds: 60));
+
+      if (streamedResponse.statusCode != 200) {
+        final errorBody = await streamedResponse.stream.bytesToString();
+        yield SyncProgressEvent.error('Ошибка сервера (${streamedResponse.statusCode}): $errorBody');
+        return;
+      }
+
+      String buffer = '';
+      await for (final chunk in streamedResponse.stream.transform(utf8.decoder)) {
+        buffer += chunk;
+        while (buffer.contains('\n\n')) {
+          final splitIndex = buffer.indexOf('\n\n');
+          final eventBlock = buffer.substring(0, splitIndex);
+          buffer = buffer.substring(splitIndex + 2);
+
+          final lines = eventBlock.split('\n');
+          String? dataStr;
+
+          for (final line in lines) {
+            final trimmed = line.trim();
+            if (trimmed.startsWith('data:')) {
+              dataStr = trimmed.substring(5).trim();
+            }
+          }
+
+          if (dataStr != null && dataStr.isNotEmpty) {
+            try {
+              final json = jsonDecode(dataStr) as Map<String, dynamic>;
+              yield SyncProgressEvent.fromJson(json);
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (e) {
+      yield SyncProgressEvent.error('Сбой передачи данных AI: $e');
+    } finally {
+      client.close();
+    }
+  }
 }

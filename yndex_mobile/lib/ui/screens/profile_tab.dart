@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../core/theme/app_colors.dart';
 import '../../state/app_view_model.dart';
 import '../../state/yandex_auth_view_model.dart';
+import '../widgets/ai_enrichment_card.dart';
 import '../widgets/server_settings_sheet.dart';
 import '../widgets/smart_playlist_sheet.dart';
 import '../widgets/sync_progress_dialog.dart';
@@ -396,6 +397,10 @@ class ProfileTab extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 20),
+
+            // AI Genre Enrichment Card
+            AiEnrichmentCard(appViewModel: appViewModel),
             const SizedBox(height: 20),
 
             // Collaborations Graph Card

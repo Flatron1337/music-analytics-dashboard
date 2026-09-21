@@ -38,7 +38,7 @@ class SyncProgressEvent {
       total: total,
       message: message,
       tracksSynced: tracksSynced,
-      isComplete: type == 'complete',
+      isComplete: type == 'complete' || type == 'done',
       isError: type == 'error',
     );
   }

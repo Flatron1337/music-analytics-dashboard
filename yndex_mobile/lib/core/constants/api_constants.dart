@@ -27,4 +27,6 @@ class ApiConstants {
   static const String endpointExportPlaylist = '/api/export-playlist';
   static const String endpointArtist = '/api/artist';
   static const String endpointCollaborationsGraph = '/api/collaborations-graph';
+  static const String endpointEnrichGenresStatus = '/api/enrich-genres/status';
+  static const String endpointEnrichGenresStream = '/api/enrich-genres/stream';
 }
