@@ -401,10 +401,21 @@ class ApiService {
     return prefs.getString(ApiConstants.prefYandexTokenKey);
   }
 
-  Future<String?> fetchTrackStream(String trackId) async {
+  Future<String?> fetchTrackStream(
+    String trackId, {
+    String? title,
+    String? artist,
+  }) async {
     final host = await baseUrl;
     final token = await getYandexToken();
-    final uri = Uri.parse('$host${ApiConstants.endpointTrackStream}/$trackId');
+    final queryParams = <String, String>{};
+    if (title != null && title.isNotEmpty) queryParams['title'] = title;
+    if (artist != null && artist.isNotEmpty) queryParams['artist'] = artist;
+
+    final baseUri = Uri.parse('$host${ApiConstants.endpointTrackStream}/$trackId');
+    final uri = queryParams.isNotEmpty
+        ? baseUri.replace(queryParameters: queryParams)
+        : baseUri;
 
     final headers = <String, String>{};
     if (token != null && token.isNotEmpty) {

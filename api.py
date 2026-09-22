@@ -9,7 +9,7 @@ import time
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request, Response, send_file
 from flask_cors import CORS
 import networkx as nx
 import pandas as pd
@@ -330,11 +330,26 @@ def get_tracks():
     for _, row in page_slice.iterrows():
         title = row.get("title_raw", "")
         artist = row.get("artist_raw", "")
-        yandex_query = urllib.parse.quote_plus(f"{artist} - {title}")
-        yandex_url = row.get("yandex_url") or f"https://music.yandex.ru/search?text={yandex_query}"
+        yandex_url = row.get("yandex_url") or ""
+
+        # Determine real Yandex track ID
+        raw_tid = str(row.get("track_id", "")).strip()
+        if raw_tid.isdigit() and int(raw_tid) > 50000:
+            real_tid = raw_tid
+        else:
+            m_tid = re.search(r"/track/(\d+)", str(yandex_url))
+            if m_tid:
+                real_tid = m_tid.group(1)
+            else:
+                real_tid = str(row.get("id", 0))
+
+        if not yandex_url:
+            yandex_query = urllib.parse.quote_plus(f"{artist} - {title}")
+            yandex_url = f"https://music.yandex.ru/search?text={yandex_query}"
 
         tracks.append({
-            "id": int(row.get("id", 0)),
+            "id": int(real_tid) if real_tid.isdigit() else int(row.get("id", 0)),
+            "track_id": real_tid,
             "title": title,
             "artist": artist,
             "artists": row.get("all_artists", []),
@@ -1176,7 +1191,41 @@ def track_stream(track_id):
             except Exception:
                 pass
 
-    info = yandex_api.get_track_stream_url(track_id, token)
+    artist_param = request.args.get("artist", "").strip() or None
+    title_param = request.args.get("title", "").strip() or None
+
+    effective_id = str(track_id).strip()
+
+    # Если передан короткий индекс или метаданные не переданы, ищем в локальном датасете
+    df = get_dataset()
+    if df is not None and not df.empty:
+        try:
+            tid_num = int(effective_id)
+            if tid_num <= 50000:
+                match_row = df[df["id"] == tid_num]
+                if not match_row.empty:
+                    r = match_row.iloc[0]
+                    # Извлекаем реальный track_id или из yandex_url
+                    raw_tid = str(r.get("track_id", "")).strip()
+                    if raw_tid.isdigit() and int(raw_tid) > 50000:
+                        effective_id = raw_tid
+                    else:
+                        m_u = re.search(r"/track/(\d+)", str(r.get("yandex_url", "")))
+                        if m_u:
+                            effective_id = m_u.group(1)
+                    if not artist_param:
+                        artist_param = str(r.get("artist_raw", "")).strip() or None
+                    if not title_param:
+                        title_param = str(r.get("title_raw", "")).strip() or None
+        except ValueError:
+            pass
+
+    info = yandex_api.get_track_stream_url(
+        effective_id,
+        token=token,
+        artist=artist_param,
+        title=title_param,
+    )
     if not info:
         return jsonify({
             "success": False,
@@ -1520,6 +1569,15 @@ def export_collaborations_graph_html():
         mimetype="text/html",
         headers={"Content-Disposition": "attachment; filename=collaborations_graph.html"}
     )
+
+
+@app.route("/api/genre-cache/download", methods=["GET"])
+def download_genre_cache():
+    """Позволяет скачать файл genre_cache.sqlite прямо с сервера Render."""
+    cache_path = os.path.join(os.path.dirname(__file__), "genre_cache.sqlite")
+    if not os.path.exists(cache_path):
+        return jsonify({"success": False, "error": "Файл genre_cache.sqlite не найден"}), 404
+    return send_file(cache_path, as_attachment=True, download_name="genre_cache.sqlite")
 
 
 if __name__ == "__main__":

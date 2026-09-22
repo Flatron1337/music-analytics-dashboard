@@ -60,7 +60,11 @@ class _TrackTileState extends State<TrackTile> {
 
     setState(() => _isLoadingStream = true);
     try {
-      final streamUrl = await widget.apiService!.fetchTrackStream(trackId);
+      final streamUrl = await widget.apiService!.fetchTrackStream(
+        trackId,
+        title: widget.track.title,
+        artist: widget.track.artist,
+      );
       if (streamUrl != null && streamUrl.isNotEmpty) {
         await playerService.playTrack(
           trackId: trackId,

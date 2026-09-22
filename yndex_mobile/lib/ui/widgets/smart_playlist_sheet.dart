@@ -457,45 +457,51 @@ class _SmartPlaylistSheetState extends State<SmartPlaylistSheet> {
               const SizedBox(height: 18),
 
               // 4. Limit Selector
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Количество треков:',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Количество треков:',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                      ),
+                      Text(
+                        _limit == 0 ? 'Все доступные треки' : '$_limit треков',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.yandexAmber),
+                      ),
+                    ],
                   ),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        {'label': '50', 'val': 50},
-                        {'label': '100', 'val': 100},
-                        {'label': '200', 'val': 200},
-                        {'label': '500', 'val': 500},
-                        {'label': 'Все ♾️', 'val': 0},
-                      ].map((item) {
-                        final count = item['val'] as int;
-                        final label = item['label'] as String;
-                        final isSelected = _limit == count;
-                        return Padding(
-                          padding: const EdgeInsets.only(left: 6),
-                          child: ChoiceChip(
-                            selected: isSelected,
-                            onSelected: (val) {
-                              if (val) setState(() => _limit = count);
-                            },
-                            label: Text(label),
-                            selectedColor: AppColors.yandexAmber,
-                            backgroundColor: AppColors.surface,
-                            labelStyle: TextStyle(
-                              color: isSelected ? Colors.black : Colors.white,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              fontSize: 12,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      {'label': '50', 'val': 50},
+                      {'label': '100', 'val': 100},
+                      {'label': '200', 'val': 200},
+                      {'label': '500', 'val': 500},
+                      {'label': 'Все треки ♾️', 'val': 0},
+                    ].map((item) {
+                      final count = item['val'] as int;
+                      final label = item['label'] as String;
+                      final isSelected = _limit == count;
+                      return ChoiceChip(
+                        selected: isSelected,
+                        onSelected: (val) {
+                          if (val) setState(() => _limit = count);
+                        },
+                        label: Text(label),
+                        selectedColor: AppColors.yandexAmber,
+                        backgroundColor: AppColors.surface,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.black : Colors.white,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 12,
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ],
               ),

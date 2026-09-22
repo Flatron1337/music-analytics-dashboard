@@ -210,13 +210,15 @@ class AIGenreClassifier:
             return [], "none"
 
         # 1. Try Primary: Google Gemini 3.6 Flash
+        last_gemini_err: Optional[Exception] = None
         try:
             results = self._call_gemini_batch(items)
             if results:
                 return results, "gemini"
-        except Exception as gemini_err:
+        except Exception as err:
+            last_gemini_err = err
             if on_progress:
-                on_progress(f"⚠️ Gemini: {gemini_err}. Переключаюсь на Groq...")
+                on_progress(f"⚠️ Gemini: {err}. Переключаюсь на Groq...")
 
         # 2. Try Fallback: Groq Qwen/LLaMA
         try:
@@ -226,7 +228,7 @@ class AIGenreClassifier:
         except Exception as groq_err:
             if on_progress:
                 on_progress(f"⚠️ Groq: {groq_err}")
-            raise RuntimeError(f"All AI providers failed. Gemini: {gemini_err}, Groq: {groq_err}")
+            raise RuntimeError(f"All AI providers failed. Gemini: {last_gemini_err}, Groq: {groq_err}")
 
         return [], "failed"
 

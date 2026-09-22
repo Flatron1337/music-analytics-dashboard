@@ -376,7 +376,11 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
             icon: const Icon(Icons.play_circle_outline_rounded, color: AppColors.cyanAccent),
             tooltip: 'Слушать превью',
             onPressed: () async {
-              final streamUrl = await widget.apiService.fetchTrackStream(track.id);
+              final streamUrl = await widget.apiService.fetchTrackStream(
+                track.id,
+                title: track.title,
+                artist: track.artist,
+              );
               if (streamUrl != null) {
                 await playerService.playTrack(
                   trackId: track.id,

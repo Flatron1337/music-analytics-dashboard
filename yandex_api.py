@@ -339,8 +339,8 @@ def create_remote_playlist(
         return False, f"Ошибка при создании плейлиста в Яндекс Музыке: {err}", None
 
 
-def get_track_stream_url(track_id: str, token: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Получает прямую ссылку на воспроизведение трека из Яндекс Музыки."""
+def find_track_id_by_meta(artist: str, title: str, token: Optional[str] = None) -> Optional[str]:
+    """Ищет трек в Яндекс Музыке по имени исполнителя и названию для определения реального track_id."""
     try:
         client = None
         if token:
@@ -350,7 +350,61 @@ def get_track_stream_url(track_id: str, token: Optional[str] = None) -> Optional
         if not client:
             client = Client()
 
-        info = client.tracks_download_info(track_id, get_direct_links=True)
+        clean_artist = re.sub(r"[\(\[\{].*?[\)\]\}]", "", artist).strip()
+        clean_title = re.sub(r"[\(\[\{].*?[\)\]\}]", "", title).strip()
+        query = f"{clean_artist} {clean_title}".strip()
+        if not query:
+            query = f"{artist} {title}".strip()
+
+        search_res = client.search(query, type_="track")
+        if search_res and search_res.tracks and search_res.tracks.results:
+            return str(search_res.tracks.results[0].id)
+    except Exception as err:
+        print(f"⚠️ Ошибка поиска трека '{artist} - {title}': {err}", flush=True)
+    return None
+
+
+def get_track_stream_url(
+    track_id: str,
+    token: Optional[str] = None,
+    artist: Optional[str] = None,
+    title: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Получает прямую ссылку на воспроизведение трека из Яндекс Музыки с fallback по метаданным."""
+    try:
+        client = None
+        if token:
+            res = login_yandex(token)
+            if isinstance(res, tuple) and res[0] is not None:
+                client = res[0]
+        if not client:
+            client = Client()
+
+        effective_track_id = str(track_id).strip()
+
+        # Если track_id похож на порядковый номер строки (<= 50000) и переданы артист/название,
+        # сначала ищем настоящий ID трека в каталоге Яндекса
+        if (not effective_track_id.isdigit() or int(effective_track_id) <= 50000) and (artist or title):
+            searched_id = find_track_id_by_meta(artist or "", title or "", token=token)
+            if searched_id:
+                effective_track_id = searched_id
+
+        info = None
+        try:
+            info = client.tracks_download_info(effective_track_id, get_direct_links=True)
+        except Exception:
+            info = None
+
+        # Если прямое получение не удалось, но есть артист и название, пробуем поиск
+        if not info and (artist or title):
+            searched_id = find_track_id_by_meta(artist or "", title or "", token=token)
+            if searched_id and searched_id != effective_track_id:
+                effective_track_id = searched_id
+                try:
+                    info = client.tracks_download_info(effective_track_id, get_direct_links=True)
+                except Exception:
+                    info = None
+
         if not info:
             return None
 
@@ -362,7 +416,7 @@ def get_track_stream_url(track_id: str, token: Optional[str] = None) -> Optional
             return None
 
         return {
-            "track_id": str(track_id),
+            "track_id": str(effective_track_id),
             "stream_url": direct_link,
             "codec": getattr(target, "codec", "mp3"),
             "bitrate_in_kbps": getattr(target, "bitrate_in_kbps", 192),
