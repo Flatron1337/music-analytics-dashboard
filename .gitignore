@@ -13,3 +13,5 @@ venv/
 *.token
 .ai_keys.json
 .env
+*.apk
+build/

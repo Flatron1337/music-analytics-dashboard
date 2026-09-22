@@ -5,6 +5,7 @@ import '../../state/app_view_model.dart';
 import '../widgets/metric_card.dart';
 import '../widgets/skeleton_loader.dart';
 import '../widgets/story_preview_dialog.dart';
+import '../widgets/audio_features_card.dart';
 import 'artist_detail_screen.dart';
 import 'collaborations_graph_screen.dart';
 
@@ -295,7 +296,11 @@ class OverviewTab extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
+
+          // Audio Features Profile Card
+          AudioFeaturesCard(apiService: viewModel.apiService),
+          const SizedBox(height: 12),
 
           // Top Artists List
           Text(

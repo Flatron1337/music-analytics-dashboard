@@ -337,3 +337,36 @@ def create_remote_playlist(
 
     except Exception as err:
         return False, f"Ошибка при создании плейлиста в Яндекс Музыке: {err}", None
+
+
+def get_track_stream_url(track_id: str, token: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Получает прямую ссылку на воспроизведение трека из Яндекс Музыки."""
+    try:
+        client = None
+        if token:
+            res = login_yandex(token)
+            if isinstance(res, tuple) and res[0] is not None:
+                client = res[0]
+        if not client:
+            client = Client()
+
+        info = client.tracks_download_info(track_id, get_direct_links=True)
+        if not info:
+            return None
+
+        mp3_info = [i for i in info if getattr(i, "codec", "") == "mp3"]
+        target = max(mp3_info, key=lambda x: getattr(x, "bitrate_in_kbps", 0)) if mp3_info else info[0]
+
+        direct_link = getattr(target, "direct_link", None)
+        if not direct_link:
+            return None
+
+        return {
+            "track_id": str(track_id),
+            "stream_url": direct_link,
+            "codec": getattr(target, "codec", "mp3"),
+            "bitrate_in_kbps": getattr(target, "bitrate_in_kbps", 192),
+        }
+    except Exception as err:
+        print(f"⚠️ Ошибка получения прямой ссылки на трек {track_id}: {err}", flush=True)
+        return None

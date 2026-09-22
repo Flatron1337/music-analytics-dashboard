@@ -12,6 +12,8 @@ import '../models/timeline_point.dart';
 import '../models/artist_details.dart';
 import '../models/collab_graph.dart';
 import '../models/sync_progress_event.dart';
+import '../models/duplicates_data.dart';
+import '../models/audio_features_data.dart';
 
 class ApiService {
   String? _customBaseUrl;
@@ -392,5 +394,63 @@ class ApiService {
     } finally {
       client.close();
     }
+  }
+
+  Future<String?> getYandexToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(ApiConstants.prefYandexTokenKey);
+  }
+
+  Future<String?> fetchTrackStream(String trackId) async {
+    final host = await baseUrl;
+    final token = await getYandexToken();
+    final uri = Uri.parse('$host${ApiConstants.endpointTrackStream}/$trackId');
+
+    final headers = <String, String>{};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    try {
+      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        return data['stream_url']?.toString();
+      }
+    } catch (e) {
+      debugPrint('Error fetching track stream for $trackId: $e');
+    }
+    return null;
+  }
+
+  Future<DuplicatesData> fetchDuplicates() async {
+    final host = await baseUrl;
+    final uri = Uri.parse('$host${ApiConstants.endpointDuplicates}');
+    final response = await http.get(uri).timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      return DuplicatesData.fromJson(data);
+    } else {
+      throw Exception('Не удалось загрузить дубликаты (${response.statusCode})');
+    }
+  }
+
+  Future<AudioFeaturesData> fetchAudioFeatures() async {
+    final host = await baseUrl;
+    final uri = Uri.parse('$host${ApiConstants.endpointAudioFeatures}');
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      return AudioFeaturesData.fromJson(data);
+    } else {
+      throw Exception('Не удалось загрузить аудио-характеристики (${response.statusCode})');
+    }
+  }
+
+  Future<String> getGraphExportHtmlUrl({int minCollabs = 1, int limitNodes = 75}) async {
+    final host = await baseUrl;
+    return '$host${ApiConstants.endpointGraphExportHtml}?min_collabs=$minCollabs&limit_nodes=$limitNodes';
   }
 }

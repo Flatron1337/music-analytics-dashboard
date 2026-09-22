@@ -3,6 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../state/app_view_model.dart';
 import '../../state/yandex_auth_view_model.dart';
 import '../widgets/server_settings_sheet.dart';
+import '../widgets/mini_player_bar.dart';
 import 'overview_tab.dart';
 import 'genres_tab.dart';
 import 'timeline_tab.dart';
@@ -104,34 +105,40 @@ class _MainScreenState extends State<MainScreen> {
             index: vm.selectedTabIndex,
             children: tabs,
           ),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: vm.selectedTabIndex,
-            onDestinationSelected: (idx) => vm.setTab(idx),
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.dashboard_outlined),
-                selectedIcon: Icon(Icons.dashboard_rounded),
-                label: 'Обзор',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.pie_chart_outline_rounded),
-                selectedIcon: Icon(Icons.pie_chart_rounded),
-                label: 'Жанры',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.timeline_rounded),
-                selectedIcon: Icon(Icons.timeline_rounded),
-                label: 'Таймлайн',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.queue_music_outlined),
-                selectedIcon: Icon(Icons.queue_music_rounded),
-                label: 'Треки',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.person_outline_rounded),
-                selectedIcon: Icon(Icons.person_rounded),
-                label: 'Профиль',
+          bottomNavigationBar: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const MiniPlayerBar(),
+              NavigationBar(
+                selectedIndex: vm.selectedTabIndex,
+                onDestinationSelected: (idx) => vm.setTab(idx),
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.dashboard_outlined),
+                    selectedIcon: Icon(Icons.dashboard_rounded),
+                    label: 'Обзор',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.pie_chart_outline_rounded),
+                    selectedIcon: Icon(Icons.pie_chart_rounded),
+                    label: 'Жанры',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.timeline_rounded),
+                    selectedIcon: Icon(Icons.timeline_rounded),
+                    label: 'Таймлайн',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.queue_music_outlined),
+                    selectedIcon: Icon(Icons.queue_music_rounded),
+                    label: 'Треки',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.person_outline_rounded),
+                    selectedIcon: Icon(Icons.person_rounded),
+                    label: 'Профиль',
+                  ),
+                ],
               ),
             ],
           ),

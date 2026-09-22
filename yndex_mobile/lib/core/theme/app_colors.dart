@@ -10,15 +10,20 @@ class AppColors {
   // Accents
   static const Color yandexAmber = Color(0xFFFFCC00);
   static const Color yandexRed = Color(0xFFFF3333);
+  static const Color error = Color(0xFFFF3333);
+  static const Color fieryRed = Color(0xFFFF3D00);
   static const Color neonPurple = Color(0xFF9D4EDD);
+  static const Color phonkPurple = Color(0xFFD500F9);
   static const Color neonCyan = Color(0xFF00E5FF);
   static const Color cyberCyan = Color(0xFF00E5FF);
+  static const Color cyanAccent = Color(0xFF00E5FF);
   static const Color neonGreen = Color(0xFF00E676);
 
   // Text
   static const Color textPrimary = Color(0xFFF0F0F5);
   static const Color textSecondary = Color(0xFF9E9EA7);
   static const Color textMuted = Color(0xFF6B6B78);
+  static const Color textTertiary = Color(0xFF6B6B78);
 
   // Cluster Specific Colors
   static const Color dubstep = Color(0xFF00E5FF);

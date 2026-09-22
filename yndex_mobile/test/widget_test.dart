@@ -5,6 +5,8 @@ import 'package:yndex_mobile/data/models/track_item.dart';
 import 'package:yndex_mobile/data/models/timeline_point.dart';
 import 'package:yndex_mobile/data/models/collab_graph.dart';
 import 'package:yndex_mobile/data/models/sync_progress_event.dart';
+import 'package:yndex_mobile/data/models/duplicates_data.dart';
+import 'package:yndex_mobile/data/models/audio_features_data.dart';
 import 'package:yndex_mobile/core/utils/formatters.dart';
 
 void main() {
@@ -177,6 +179,84 @@ void main() {
       final completeEvent = SyncProgressEvent.fromJson(completeJson);
       expect(completeEvent.isComplete, true);
       expect(completeEvent.tracksSynced, 9006);
+    });
+
+    test('DuplicatesData model fromJson test', () {
+      final json = {
+        'success': true,
+        'total_duplicates': 140,
+        'duplicate_groups_count': 107,
+        'total_redundant_time_sec': 25200,
+        'total_redundant_time_fmt': '7 ч. 0 мин.',
+        'groups': [
+          {
+            'key': 'animals',
+            'artist': 'Martin Garrix',
+            'title': 'animals',
+            'count': 2,
+            'tracks': [
+              {
+                'id': '101',
+                'title': 'Animals',
+                'artist': 'Martin Garrix',
+                'album': 'Animals',
+                'duration_sec': 190,
+                'duration_fmt': '3:10',
+                'genre_cluster': 'Dubstep & EDM',
+                'is_original': true,
+                'cover_url': 'https://example.com/cover1.jpg',
+                'yandex_url': 'https://music.yandex.ru/track/101',
+              },
+              {
+                'id': '102',
+                'title': 'Animals (Original Mix)',
+                'artist': 'Martin Garrix',
+                'album': 'Animals Deluxe',
+                'duration_sec': 300,
+                'duration_fmt': '5:00',
+                'genre_cluster': 'Dubstep & EDM',
+                'is_original': false,
+                'cover_url': 'https://example.com/cover2.jpg',
+                'yandex_url': 'https://music.yandex.ru/track/102',
+              }
+            ]
+          }
+        ]
+      };
+      final duplicates = DuplicatesData.fromJson(json);
+      expect(duplicates.totalDuplicates, 140);
+      expect(duplicates.duplicateGroupsCount, 107);
+      expect(duplicates.groups.length, 1);
+      expect(duplicates.groups.first.tracks.first.isOriginal, true);
+      expect(duplicates.groups.first.tracks.last.isOriginal, false);
+    });
+
+    test('AudioFeaturesData model fromJson test', () {
+      final json = {
+        'success': true,
+        'total_tracks': 9006,
+        'energy_score_percent': 81.2,
+        'energy_label': 'Максимальный драйв 🔥',
+        'average_duration_sec': 192,
+        'average_duration_fmt': '3:12',
+        'collab_ratio_percent': 35.3,
+        'bpm_profile': [
+          {'range': '150-180+ BPM', 'label': 'Hardcore / Drum & Bass / Phonk', 'count': 3467, 'percent': 38.5, 'color': '#FF0055'},
+          {'range': '130-150 BPM', 'label': 'Dubstep / Hard Dance', 'count': 2891, 'percent': 32.1, 'color': '#00E5FF'},
+        ],
+        'loudness_profile': {
+          'heavy_lufs_percent': 85.0,
+          'standard_lufs_percent': 12.0,
+          'acoustic_lufs_percent': 3.0,
+        },
+      };
+      final features = AudioFeaturesData.fromJson(json);
+      expect(features.totalTracks, 9006);
+      expect(features.energyScorePercent, 81.2);
+      expect(features.energyLabel, 'Максимальный драйв 🔥');
+      expect(features.bpmProfile.length, 2);
+      expect(features.bpmProfile.first.range, '150-180+ BPM');
+      expect(features.loudnessProfile.heavyLufsPercent, 85.0);
     });
   });
 }

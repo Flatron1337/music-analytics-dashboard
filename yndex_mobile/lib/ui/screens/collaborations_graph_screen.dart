@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../data/models/collab_graph.dart';
 import '../../data/services/api_service.dart';
 import 'artist_detail_screen.dart';
@@ -78,6 +79,34 @@ class _CollaborationsGraphScreenState extends State<CollaborationsGraphScreen> {
       0, 0, 1, 0,
       xTranslation, yTranslation, 0, 1,
     );
+  }
+
+  Future<void> _exportHtmlGraph() async {
+    try {
+      final exportUrl = await widget.apiService.getGraphExportHtmlUrl(
+        minCollabs: _minCollabs,
+        limitNodes: _limitNodes,
+      );
+      final uri = Uri.parse(exportUrl);
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Интерактивная карта связей (HTML) успешно скачана!'),
+            backgroundColor: Color(0xFF1E1B4B),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка экспорта: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _loadGraph() async {
@@ -362,6 +391,15 @@ class _CollaborationsGraphScreenState extends State<CollaborationsGraphScreen> {
                       ],
                     ),
                   ),
+                  IconButton(
+                    onPressed: _exportHtmlGraph,
+                    tooltip: 'Экспорт интерактивной карты в HTML',
+                    icon: const Icon(Icons.download_rounded, color: Color(0xFFD500F9)),
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFD500F9).withValues(alpha: 0.12),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   IconButton(
                     onPressed: _centerView,
                     tooltip: 'Центрировать карту',

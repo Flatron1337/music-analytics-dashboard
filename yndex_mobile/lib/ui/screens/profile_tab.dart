@@ -8,6 +8,7 @@ import '../widgets/server_settings_sheet.dart';
 import '../widgets/smart_playlist_sheet.dart';
 import '../widgets/sync_progress_dialog.dart';
 import 'collaborations_graph_screen.dart';
+import 'duplicates_screen.dart';
 
 class ProfileTab extends StatelessWidget {
   final AppViewModel appViewModel;
@@ -472,6 +473,78 @@ class ProfileTab extends StatelessWidget {
                         backgroundColor: AppColors.neonCyan,
                         foregroundColor: Colors.black,
                         padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Duplicate Tracks Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.yandexAmber.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.yandexAmber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.find_replace_rounded, color: AppColors.yandexAmber, size: 28),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Поиск дубликатов',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const SizedBox(width: 6),
+                                const Text('🔍', style: TextStyle(fontSize: 16)),
+                              ],
+                            ),
+                            const Text(
+                              'Нахождение повторов, ремастеров и дублей',
+                              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        DuplicatesScreen.navigate(context, appViewModel.apiService);
+                      },
+                      icon: const Icon(Icons.manage_search_rounded, color: AppColors.yandexAmber),
+                      label: const Text(
+                        'Найти и очистить дубликаты',
+                        style: TextStyle(color: AppColors.yandexAmber, fontWeight: FontWeight.bold),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppColors.yandexAmber.withValues(alpha: 0.5)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ),
