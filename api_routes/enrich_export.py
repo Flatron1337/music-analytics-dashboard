@@ -1,7 +1,7 @@
 import logging
 import os
 import queue
-import sqlite3
+
 import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -26,38 +26,25 @@ enrich_export_bp = Blueprint("enrich_export", __name__)
 
 @enrich_export_bp.route("/api/enrich-genres/status", methods=["GET"])
 def enrich_genres_status():
+    import genre_db
     classifier = get_classifier()
     ai_classifier = get_ai_classifier()
     cache_db = classifier.db_path
 
-    total_artists = 0
-    unresolved_artists = 0
-    ai_enriched_artists = 0
-
-    if os.path.exists(cache_db):
-        try:
-            with sqlite3.connect(cache_db, timeout=5.0) as conn:
-                cur = conn.cursor()
-                cur.execute("SELECT count(*) FROM artist_cache")
-                total_artists = cur.fetchone()[0]
-                cur.execute("SELECT count(*) FROM artist_cache WHERE source = 'unresolved'")
-                unresolved_artists = cur.fetchone()[0]
-                cur.execute("SELECT count(*) FROM artist_cache WHERE source LIKE 'ai_%'")
-                ai_enriched_artists = cur.fetchone()[0]
-        except (sqlite3.Error, OSError) as e:
-            logger.debug("Could not query artist_cache sqlite: %s", e)
-
+    stats = genre_db.get_db_stats(cache_db)
     g_k, q_k = _load_keys()
     has_gemini = bool(ai_classifier.gemini_key or g_k)
     has_groq = bool(ai_classifier.groq_key or q_k)
 
     return jsonify({
-        "total_cached_artists": total_artists,
-        "unresolved_artists": unresolved_artists,
-        "ai_enriched_artists": ai_enriched_artists,
+        "total_cached_artists": stats["total"],
+        "unresolved_artists": stats["unresolved"],
+        "ai_enriched_artists": stats["ai_enriched"],
+        "database_backend": stats["backend"],
         "has_gemini": has_gemini,
         "has_groq": has_groq,
     })
+
 
 
 def _build_artist_tracks_map() -> Dict[str, List[str]]:
@@ -126,12 +113,8 @@ def _reclassify_library(classifier: Any) -> None:
 
 def _run_enrich_worker(cache_db: str, q: queue.Queue) -> None:
     try:
-        targets: List[Tuple[str, str]] = []
-        with sqlite3.connect(cache_db, timeout=20.0) as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT artist_key, artist_name FROM artist_cache WHERE source = 'unresolved'")
-            targets = cur.fetchall()
-
+        import genre_db
+        targets = genre_db.fetch_unresolved_artists(cache_db)
         total = len(targets)
         if total == 0:
             q.put({"type": "done", "percent": 100, "current": 0, "total": 0, "message": "Все артисты уже классифицированы!"})
@@ -149,6 +132,7 @@ def _run_enrich_worker(cache_db: str, q: queue.Queue) -> None:
         q.put({"type": "error", "percent": 0, "message": f"Ошибка AI: {e}"})
     finally:
         q.put(None)
+
 
 
 @enrich_export_bp.route("/api/enrich-genres/stream", methods=["GET", "POST"])

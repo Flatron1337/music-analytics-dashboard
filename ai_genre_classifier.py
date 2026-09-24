@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import re
-import sqlite3
+
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
@@ -247,24 +247,10 @@ class AIGenreClassifier:
     ) -> int:
         if not results:
             return 0
-        saved_count = 0
-        with sqlite3.connect(db_path, timeout=30.0) as conn:
-            cursor = conn.cursor()
-            cursor.execute("PRAGMA journal_mode=WAL;")
-            for item in results:
-                artist_name = item["artist"].strip()
-                artist_key = artist_name.lower()
-                cluster = item["cluster"]
-                tags = item.get("tags", [])
-                tags_json = json.dumps(tags, ensure_ascii=False)
+        import genre_db
+        batch = [
+            (item["artist"].strip(), item["cluster"], item.get("tags", []), "ai")
+            for item in results
+        ]
+        return genre_db.save_cached_artists_batch(batch, db_path)
 
-                cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO artist_cache (artist_key, artist_name, cluster, tags_json, source)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (artist_key, artist_name, cluster, tags_json, "ai"),
-                )
-                saved_count += 1
-            conn.commit()
-        return saved_count

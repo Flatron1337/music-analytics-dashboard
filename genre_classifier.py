@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import re
-import sqlite3
+
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -55,36 +55,13 @@ class GenreClassifier:
         self._load_memory_cache()
 
     def _init_db(self) -> None:
-        with sqlite3.connect(self.db_path, timeout=30.0) as conn:
-            conn.execute("PRAGMA journal_mode=WAL;")
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS artist_cache (
-                    artist_key TEXT PRIMARY KEY,
-                    artist_name TEXT,
-                    cluster TEXT,
-                    tags_json TEXT,
-                    source TEXT,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-            conn.commit()
+        import genre_db
+        genre_db.init_db(self.db_path)
 
     def reload_memory_cache(self) -> int:
-        count = 0
-        try:
-            with sqlite3.connect(self.db_path, timeout=30.0) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT artist_key, cluster, tags_json FROM artist_cache")
-                for key, cluster, tags_json in cursor.fetchall():
-                    tags = json.loads(tags_json) if tags_json else []
-                    self._mem_cache[key] = (cluster, tags)
-                    count += 1
-        except (sqlite3.Error, json.JSONDecodeError, OSError) as e:
-            logger.warning("Failed to reload memory cache from %s: %s", self.db_path, e)
-        return count
+        import genre_db
+        self._mem_cache = genre_db.load_all_cached_artists(self.db_path)
+        return len(self._mem_cache)
 
     def _load_memory_cache(self) -> None:
         self.reload_memory_cache()
@@ -102,42 +79,19 @@ class GenreClassifier:
         tags: List[str],
         source: str = "api",
     ) -> None:
+        import genre_db
         key = artist_name.strip().lower()
         self._mem_cache[key] = (cluster, tags)
-        with sqlite3.connect(self.db_path, timeout=30.0) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO artist_cache (artist_key, artist_name, cluster, tags_json, source)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (key, artist_name.strip(), cluster, json.dumps(tags, ensure_ascii=False), source),
-            )
-            conn.commit()
-
+        genre_db.save_cached_artists_batch([(artist_name, cluster, tags, source)], self.db_path)
 
     def save_cached_artists_batch(self, batch: List[Tuple[str, str, List[str], str]]) -> None:
         if not batch:
             return
-        with sqlite3.connect(self.db_path, timeout=30.0) as conn:
-            cursor = conn.cursor()
-            cursor.executemany(
-                """
-                INSERT OR REPLACE INTO artist_cache (artist_key, artist_name, cluster, tags_json, source)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                [
-                    (
-                        art.strip().lower(),
-                        art.strip(),
-                        cl,
-                        json.dumps(tags, ensure_ascii=False),
-                        src,
-                    )
-                    for art, cl, tags, src in batch
-                ],
-            )
-            conn.commit()
+        import genre_db
+        for art, cl, tags, _ in batch:
+            self._mem_cache[art.strip().lower()] = (cl, tags)
+        genre_db.save_cached_artists_batch(batch, self.db_path)
+
 
     def fetch_lastfm_tags(self, artist_name: str, timeout: float = 4.0) -> List[str]:
         cleaned = artist_name.strip()

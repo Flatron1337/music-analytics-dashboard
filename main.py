@@ -205,10 +205,35 @@ async def router_handler(request: web.Request) -> web.StreamResponse:
     return await proxy_http_request(request, f"http://127.0.0.1:{STREAMLIT_PORT}")
 
 
+async def keep_alive_worker(_app: web.Application) -> None:
+    pub_url = os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("PING_URL")
+    if not pub_url:
+        return
+
+    health_url = f"{pub_url.rstrip('/')}/api/health"
+    print(f"[*] Keep-Alive фоновый самопинг включен: {health_url} каждые 13 мин", flush=True)
+
+    async def _loop():
+        await asyncio.sleep(45)
+        while True:
+            try:
+                t = aiohttp.ClientTimeout(total=25)
+                async with aiohttp.ClientSession(timeout=t) as s:
+                    async with s.get(health_url) as r:
+                        logger.info("Keep-Alive ping to %s: HTTP %s", health_url, r.status)
+            except Exception as e:
+                logger.debug("Keep-Alive ping error: %s", e)
+            await asyncio.sleep(13 * 60)
+
+    asyncio.create_task(_loop())
+
+
 def init_app() -> web.Application:
     app = web.Application()
+    app.on_startup.append(keep_alive_worker)
     app.router.add_route("*", "/{tail:.*}", router_handler)
     return app
+
 
 
 def main() -> None:
