@@ -4,6 +4,7 @@ import streamlit as st
 
 from genre_classifier import GenreClassifier
 from parser import load_playlist
+from ui.ai_widget import render_ai_enrichment_widget, render_mobile_app_card
 from ui.auth import handle_sidebar_auth
 from ui.catalog import render_duration_tab, render_search_tab
 from ui.duplicates import render_duplicates_tab
@@ -59,6 +60,28 @@ st.markdown(
         letter-spacing: 0.05em;
         margin-top: 4px;
     }
+    @media (max-width: 768px) {
+        .main-title {
+            font-size: 1.6rem;
+        }
+        .sub-title {
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+        .metric-card {
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+        .metric-value {
+            font-size: 1.35rem;
+        }
+        .metric-label {
+            font-size: 0.75rem;
+        }
+        div[data-testid="stHorizontalBlock"] {
+            gap: 0.5rem;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -105,12 +128,14 @@ def _setup_ordered_dataframe(df_raw: pd.DataFrame, source_name: str) -> pd.DataF
     return df
 
 
-def _render_sidebar_meta(source_name: str, has_active_yandex: bool, account_uid_str: str, total_tracks: int) -> None:
+def _render_sidebar_meta(df: pd.DataFrame, source_name: str, has_active_yandex: bool, account_uid_str: str) -> None:
     st.sidebar.markdown("---")
     st.sidebar.caption(f"📁 Источник: **{source_name}**")
     st.sidebar.caption(f"🟡 Сервис: **Яндекс Музыка** {'(Live API 🟢)' if has_active_yandex else ''}")
     st.sidebar.caption(f"👤 ID профиля: **{account_uid_str}**")
-    st.sidebar.caption(f"🎵 Всего треков: **{total_tracks:,}**")
+    st.sidebar.caption(f"🎵 Всего треков: **{len(df):,}**")
+    render_ai_enrichment_widget(df)
+    render_mobile_app_card()
 
 
 def main() -> None:
@@ -119,7 +144,7 @@ def main() -> None:
         st.stop()
 
     df = _setup_ordered_dataframe(df_raw, source_name)
-    _render_sidebar_meta(source_name, has_active_yandex, account_uid_str, len(df))
+    _render_sidebar_meta(df, source_name, has_active_yandex, account_uid_str)
 
     st.markdown('<div class="main-title">🎧 Анализ музыкального плейлиста</div>', unsafe_allow_html=True)
     st.markdown(
