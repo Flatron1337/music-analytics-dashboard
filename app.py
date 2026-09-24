@@ -6,6 +6,7 @@ from genre_classifier import GenreClassifier
 from parser import load_playlist
 from ui.auth import handle_sidebar_auth
 from ui.catalog import render_duration_tab, render_search_tab
+from ui.duplicates import render_duplicates_tab
 from ui.genres import render_genres_tab
 from ui.graph import render_graph_tab
 from ui.overview import render_overview_tab
@@ -134,9 +135,10 @@ def main() -> None:
             "🕸️ Граф связей артистов",
             "⏱️ Хронометраж",
             "🔍 Каталог и поиск",
+            "🧹 Дубликаты и ремастеры",
         ]
     )
-    tab_ov, tab_gen, tab_time, tab_graph, tab_dur, tab_search = tabs
+    tab_ov, tab_gen, tab_time, tab_graph, tab_dur, tab_search, tab_dups = tabs
 
     with tab_ov:
         all_artists_series = render_overview_tab(df)
@@ -150,6 +152,8 @@ def main() -> None:
         render_duration_tab(df, all_artists_series)
     with tab_search:
         render_search_tab(df)
+    with tab_dups:
+        render_duplicates_tab(df)
 
 
 if __name__ == "__main__":

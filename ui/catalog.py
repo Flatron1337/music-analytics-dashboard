@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import urllib.parse
 import pandas as pd
 import plotly.express as px
@@ -114,8 +114,59 @@ def _render_search_results(filtered_df: pd.DataFrame, total_count: int) -> None:
     st.download_button(label="📥 Скачать найденные треки в CSV", data=csv_data, file_name="filtered_music_tracks.csv", mime="text/csv")
 
 
+def _fetch_track_stream_cached(
+    track_id: str,
+    artist: str,
+    title: str,
+    token: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    import yandex_api
+    return yandex_api.get_track_stream_url(track_id, token=token, artist=artist, title=title)
+
+
+def _render_track_audio_player(filtered_df: pd.DataFrame) -> None:
+    if filtered_df.empty:
+        return
+
+    st.markdown("---")
+    st.markdown("#### 🎧 Прослушать аудио-отрывок трека (Audio Preview)")
+    sample_df = filtered_df.head(50)
+    options = [f"№{r['id']} — {r['artist_raw']} — {r['title_raw']}" for _, r in sample_df.iterrows()]
+    selected_option = st.selectbox(
+        "Выберите трек для прослушивания (первые 50 из найденных):",
+        options,
+        key="preview_track_sel",
+    )
+    if not selected_option:
+        return
+
+    idx = options.index(selected_option)
+    sel_row = sample_df.iloc[idx]
+    col_btn, col_player = st.columns([1, 3])
+    with col_btn:
+        play_clicked = st.button("▶️ Загрузить превью", key=f"btn_play_{sel_row['id']}")
+
+    if play_clicked:
+        token = st.session_state.get("yandex_token") or None
+        with st.spinner("Получение аудио-потока из Яндекс Музыки..."):
+            stream_info = _fetch_track_stream_cached(
+                str(sel_row["id"]),
+                str(sel_row["artist_raw"]),
+                str(sel_row["title_raw"]),
+                token,
+            )
+        if stream_info and stream_info.get("stream_url"):
+            with col_player:
+                st.caption(f"Битрейт: {stream_info.get('bitrate', 192)} kbps ({stream_info.get('codec', 'mp3')})")
+                st.audio(stream_info["stream_url"])
+        else:
+            with col_player:
+                st.warning("Не удалось получить аудио-поток для этого трека (возможно, требуется авторизация с Плюсом).")
+
+
 def render_search_tab(df: pd.DataFrame) -> None:
     """Отображает вкладку поиска и каталога треков."""
     st.markdown("### 🔍 Поиск и фильтрация треков")
     filtered = _filter_search_dataset(df)
     _render_search_results(filtered, len(df))
+    _render_track_audio_player(filtered)

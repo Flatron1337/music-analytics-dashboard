@@ -146,7 +146,7 @@ async def proxy_http_request(request: web.Request, target_base_url: str) -> web.
     is_stream = "event-stream" in accept_hdr or "stream" in request.path.lower()
     timeout = aiohttp.ClientTimeout(total=300 if is_stream else 45, connect=12)
 
-    for attempt in range(4):
+    for attempt in range(5):
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.request(
@@ -166,21 +166,22 @@ async def proxy_http_request(request: web.Request, target_base_url: str) -> web.
                     resp.enable_compression()
                     return resp
         except aiohttp.ClientConnectorError:
-            if attempt < 3:
-                await asyncio.sleep(1.2)
+            if attempt < 4:
+                await asyncio.sleep(1.5)
                 continue
-            return web.Response(text="Сервис инициализируется, повторите запрос...", status=503, content_type="text/plain; charset=utf-8")
+            return web.Response(text="Сервис инициализируется, повторите запрос...", status=503, content_type="text/plain", charset="utf-8")
         except Exception as e:
             logger.warning("Proxy error for %s: %s", target_url, e)
-            return web.Response(text=f"Ошибка проксирования: {e}", status=502, content_type="text/plain; charset=utf-8")
+            return web.Response(text=f"Ошибка проксирования: {e}", status=502, content_type="text/plain", charset="utf-8")
 
-    return web.Response(text="Служба временно недоступна", status=503, content_type="text/plain; charset=utf-8")
+    return web.Response(text="Служба временно недоступна", status=503, content_type="text/plain", charset="utf-8")
 
 
 async def download_apk_handler(_: web.Request) -> web.StreamResponse:
     """Прямая отдача собранного Android APK приложения для скачивания со смартфона."""
     if not os.path.exists(APK_PATH):
-        return web.Response(text="APK файл ещё не собран на сервере", status=404, content_type="text/plain; charset=utf-8")
+        return web.Response(text="APK файл ещё не собран на сервере", status=404, content_type="text/plain", charset="utf-8")
+
     return web.FileResponse(
         APK_PATH,
         headers={
