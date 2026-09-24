@@ -1,10 +1,12 @@
 import argparse
-import json
+import logging
 import os
 import sqlite3
 import sys
 import time
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 from ai_genre_classifier import (
     AIGenreClassifier,
@@ -22,6 +24,18 @@ SYNCED_PKL_PATH = os.path.join(BASE_DIR, "synced_likes.pkl")
 DEFAULT_TXT_PATH = os.path.join(BASE_DIR, "Мне нравится_965180470_20260915_213456.txt")
 
 
+def _populate_artist_tracks(df, target_dict: Dict[str, List[str]]) -> None:
+    if df.empty or "all_artists" not in df.columns or "title_raw" not in df.columns:
+        return
+    for _, row in df.iterrows():
+        title = str(row.get("title_raw", "")).strip()
+        artists = row.get("all_artists") or []
+        for art in artists:
+            key = str(art).strip().lower()
+            if key:
+                target_dict.setdefault(key, []).append(title)
+
+
 def load_artist_tracks_map() -> Dict[str, List[str]]:
     """Builds a map of lowercase artist name -> list of track titles from the library."""
     artist_tracks: Dict[str, List[str]] = {}
@@ -31,18 +45,11 @@ def load_artist_tracks_map() -> Dict[str, List[str]]:
         try:
             import pandas as pd
             df = pd.read_pickle(SYNCED_PKL_PATH)
-            if not df.empty and "all_artists" in df.columns and "title_raw" in df.columns:
-                for _, row in df.iterrows():
-                    title = str(row.get("title_raw", "")).strip()
-                    artists = row.get("all_artists", [])
-                    if isinstance(artists, list):
-                        for art in artists:
-                            key = str(art).strip().lower()
-                            if key:
-                                artist_tracks.setdefault(key, []).append(title)
+            _populate_artist_tracks(df, artist_tracks)
+            if artist_tracks:
                 return artist_tracks
-        except Exception:
-            pass
+        except (IOError, OSError, ValueError, KeyError) as e:
+            logger.debug("Could not read synced pickle %s: %s", SYNCED_PKL_PATH, e)
 
     # 2. Try text playlist file
     txt_candidates = [
@@ -50,19 +57,10 @@ def load_artist_tracks_map() -> Dict[str, List[str]]:
         *[os.path.join(BASE_DIR, f) for f in os.listdir(BASE_DIR) if f.startswith("Мне нравится") and f.endswith(".txt")]
     ]
     txt_path = next((p for p in txt_candidates if os.path.exists(p)), None)
-
     if txt_path:
         from parser import load_playlist
         df = load_playlist(txt_path)
-        if not df.empty:
-            for _, row in df.iterrows():
-                title = str(row.get("title_raw", "")).strip()
-                artists = row.get("all_artists", [])
-                if isinstance(artists, list):
-                    for art in artists:
-                        key = str(art).strip().lower()
-                        if key:
-                            artist_tracks.setdefault(key, []).append(title)
+        _populate_artist_tracks(df, artist_tracks)
 
     return artist_tracks
 
@@ -158,6 +156,7 @@ def main():
             processed_total += len(chunk)
             print(f" ✅ Готово ({provider}: сохранено {saved})", flush=True)
         except Exception as e:
+            logger.error("AI batch classification error: %s", e, exc_info=True)
             print(f" ❌ Ошибка: {e}", flush=True)
 
         if i + batch_size < total_count:

@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 import re
 import sqlite3
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 def _load_keys() -> Tuple[str, str]:
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
@@ -19,8 +22,8 @@ def _load_keys() -> Tuple[str, str]:
                     gemini_key = str(data.get("gemini_api_key", "")).strip()
                 if not groq_key:
                     groq_key = str(data.get("groq_api_key", "")).strip()
-        except Exception:
-            pass
+        except (IOError, json.JSONDecodeError, OSError) as e:
+            logger.debug("Failed to read keys from %s: %s", keys_file, e)
 
     return gemini_key, groq_key
 
@@ -110,7 +113,12 @@ class AIGenreClassifier:
                     candidates = data.get("candidates", [])
                     if not candidates:
                         raise ValueError(f"Gemini {model} returned empty candidates")
-                    text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                    candidate = candidates[0]
+                    content = candidate.get("content")
+                    parts = content.get("parts") if isinstance(content, dict) else None
+                    text = ""
+                    if parts and isinstance(parts, list) and isinstance(parts[0], dict):
+                        text = str(parts[0].get("text", "")).strip()
                     return self._parse_json_result(text)
             except Exception as e:
                 last_err = e
@@ -122,7 +130,7 @@ class AIGenreClassifier:
         if not self.groq_key:
             raise ValueError("GROQ_API_KEY is not configured")
 
-        url = "https://api.groq.com/openai/v1/chat/completions"
+        url = os.environ.get("GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions")
         payload = {
             "model": GROQ_MODEL,
             "messages": [

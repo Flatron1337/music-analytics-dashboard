@@ -1,12 +1,14 @@
 import json
+import logging
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
-import urllib.parse
 
 import pandas as pd
 from yandex_music import Client
-from yandex_music.exceptions import UnauthorizedError, YandexMusicError
+from yandex_music.exceptions import UnauthorizedError
 from yandex_music.utils.difference import Difference
+
+logger = logging.getLogger(__name__)
 
 from parser import extract_artists
 
@@ -94,6 +96,93 @@ def login_yandex(
         return None, None, f"Ошибка подключения к Яндекс Музыке: {err}"
 
 
+def _clean_id(val: Any) -> Optional[str]:
+    if val is None or pd.isna(val):
+        return None
+    s = str(val).strip()
+    if not s or s.lower() in ("nan", "none"):
+        return None
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s if s.isdigit() and int(s) > 0 else None
+
+
+def _recover_albums(client: Client, missing_ids: List[str]) -> Dict[str, str]:
+    recovered: Dict[str, str] = {}
+    if not missing_ids:
+        return recovered
+    chunk_size = 100
+    for i in range(0, len(missing_ids), chunk_size):
+        chunk = missing_ids[i : i + chunk_size]
+        try:
+            fetched = client.tracks(chunk)
+            for f_t in fetched:
+                if not (f_t and f_t.albums and f_t.albums[0].id):
+                    continue
+                f_alb = _clean_id(f_t.albums[0].id)
+                if f_alb:
+                    recovered[str(f_t.id)] = f_alb
+        except Exception as e:
+            logger.debug("Could not fetch track batch from Yandex Music: %s", e)
+    return recovered
+
+
+def _build_track_record(t: Any, t_id_str: str, global_idx: int) -> Dict[str, Any]:
+    if not t:
+        return {
+            "id": global_idx,
+            "track_id": t_id_str,
+            "album_id": "",
+            "artist_raw": "Неизвестный исполнитель",
+            "title_raw": f"Трек {t_id_str}",
+            "duration_sec": 0,
+            "duration_fmt": "0:00",
+            "primary_artist": "Неизвестный исполнитель",
+            "all_artists": ["Неизвестный исполнитель"],
+            "artists_count": 1,
+            "is_collab": False,
+            "cover_uri": "",
+            "yandex_url": f"https://music.yandex.ru/track/{t_id_str}",
+        }
+
+    artist_names = [a.name for a in t.artists if a and a.name]
+    artist_raw = ", ".join(artist_names) if artist_names else "Неизвестный артист"
+    title_raw = t.title or "Без названия"
+    if t.version:
+        title_raw += f" ({t.version})"
+
+    dur_sec = round((t.duration_ms or 0) / 1000)
+    dur_fmt = f"{dur_sec // 60}:{dur_sec % 60:02d}"
+
+    extracted_artists = extract_artists(artist_raw, title_raw)
+    combined_artists = list(dict.fromkeys(artist_names + extracted_artists)) or [artist_raw]
+    primary_artist = combined_artists[0]
+    is_collab = len(combined_artists) > 1
+
+    album_id = str(t.albums[0].id) if t.albums else ""
+    cover_uri = f"https://{t.cover_uri.replace('%%', '200x200')}" if t.cover_uri else ""
+    yandex_url = (
+        f"https://music.yandex.ru/album/{album_id}/track/{t.id}"
+        if album_id else f"https://music.yandex.ru/track/{t.id}"
+    )
+
+    return {
+        "id": global_idx,
+        "track_id": str(t.id),
+        "album_id": album_id,
+        "artist_raw": artist_raw,
+        "title_raw": title_raw,
+        "duration_sec": dur_sec,
+        "duration_fmt": dur_fmt,
+        "primary_artist": primary_artist,
+        "all_artists": combined_artists,
+        "artists_count": len(combined_artists),
+        "is_collab": is_collab,
+        "cover_uri": cover_uri,
+        "yandex_url": yandex_url,
+    }
+
+
 def fetch_user_likes_df(
     client: Client,
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
@@ -110,109 +199,32 @@ def fetch_user_likes_df(
     tracks_short = likes_obj.tracks
     total_tracks = len(tracks_short)
     track_ids = [t.id for t in tracks_short]
-
     records: List[Dict[str, Any]] = []
 
-    # Пакетная загрузка детальной информации о треках
     for start_idx in range(0, total_tracks, batch_size):
         end_idx = min(start_idx + batch_size, total_tracks)
         batch = track_ids[start_idx:end_idx]
 
         if progress_callback:
             pct = int((start_idx / total_tracks) * 100)
-            progress_callback(
-                pct,
-                100,
-                f"Загрузка метаданных треков {start_idx + 1}–{end_idx} из {total_tracks:,}...",
-            )
+            progress_callback(pct, 100, f"Загрузка метаданных треков {start_idx + 1}–{end_idx} из {total_tracks:,}...")
 
         try:
             full_tracks = client.tracks(batch)
         except Exception:
             full_tracks = []
 
-        # Словарь для быстрого сопоставления по ID
         track_map = {str(t.id): t for t in full_tracks if t and t.id}
-
         for local_offset, t_id_raw in enumerate(batch):
             global_idx = start_idx + local_offset + 1
             t_id_str = str(t_id_raw)
             t = track_map.get(t_id_str)
-
-            if not t:
-                # Если метаданные недоступны
-                records.append(
-                    {
-                        "id": global_idx,
-                        "track_id": t_id_str,
-                        "album_id": "",
-                        "artist_raw": "Неизвестный исполнитель",
-                        "title_raw": f"Трек {t_id_str}",
-                        "duration_sec": 0,
-                        "duration_fmt": "0:00",
-                        "primary_artist": "Неизвестный исполнитель",
-                        "all_artists": ["Неизвестный исполнитель"],
-                        "artists_count": 1,
-                        "is_collab": False,
-                        "cover_uri": "",
-                        "yandex_url": f"https://music.yandex.ru/track/{t_id_str}",
-                    }
-                )
-                continue
-
-            artist_names = [a.name for a in t.artists if a and a.name]
-            artist_raw = ", ".join(artist_names) if artist_names else "Неизвестный артист"
-
-            title_raw = t.title or "Без названия"
-            if t.version:
-                title_raw += f" ({t.version})"
-
-            dur_sec = round((t.duration_ms or 0) / 1000)
-            dur_fmt = f"{dur_sec // 60}:{dur_sec % 60:02d}"
-
-            # Извлечение фитов и соавторов
-            extracted_artists = extract_artists(artist_raw, title_raw)
-            combined_artists = list(dict.fromkeys(artist_names + extracted_artists))
-            if not combined_artists:
-                combined_artists = [artist_raw]
-
-            primary_artist = combined_artists[0]
-            is_collab = len(combined_artists) > 1
-
-            album_id = str(t.albums[0].id) if t.albums else ""
-            cover_uri = ""
-            if t.cover_uri:
-                cover_uri = f"https://{t.cover_uri.replace('%%', '200x200')}"
-
-            yandex_url = (
-                f"https://music.yandex.ru/album/{album_id}/track/{t.id}"
-                if album_id
-                else f"https://music.yandex.ru/track/{t.id}"
-            )
-
-            records.append(
-                {
-                    "id": global_idx,
-                    "track_id": str(t.id),
-                    "album_id": album_id,
-                    "artist_raw": artist_raw,
-                    "title_raw": title_raw,
-                    "duration_sec": dur_sec,
-                    "duration_fmt": dur_fmt,
-                    "primary_artist": primary_artist,
-                    "all_artists": combined_artists,
-                    "artists_count": len(combined_artists),
-                    "is_collab": is_collab,
-                    "cover_uri": cover_uri,
-                    "yandex_url": yandex_url,
-                }
-            )
+            records.append(_build_track_record(t, t_id_str, global_idx))
 
     if progress_callback:
         progress_callback(100, 100, "Коллекция успешно загружена!")
 
-    df = pd.DataFrame(records)
-    return df
+    return pd.DataFrame(records)
 
 
 def create_remote_playlist(
@@ -230,20 +242,8 @@ def create_remote_playlist(
         if progress_callback:
             progress_callback(0, 100, f"Создание плейлиста '{title}' в Яндекс Музыке...")
 
-        # Вспомогательная функция очистки числовых ID
-        def _clean_id(val: Any) -> Optional[str]:
-            if val is None or pd.isna(val):
-                return None
-            s = str(val).strip()
-            if not s or s.lower() in ("nan", "none"):
-                return None
-            if s.endswith(".0"):
-                s = s[:-2]
-            return s if s.isdigit() and int(s) > 0 else None
-
-        # 1. Отбираем треки с валидными track_id и проверяем наличие album_id
-        items_with_album = []
-        missing_album_track_ids = []
+        items_with_album: List[Dict[str, str]] = []
+        missing_album_track_ids: List[str] = []
 
         for t in tracks:
             t_id = _clean_id(t.get("track_id"))
@@ -255,24 +255,8 @@ def create_remote_playlist(
             else:
                 missing_album_track_ids.append(t_id)
 
-        # 2. Если есть треки без album_id, пробуем восстановить их альбомы через клиент Яндекса
-        recovered_albums = {}
-        if missing_album_track_ids:
-            chunk_size = 100
-            for i in range(0, len(missing_album_track_ids), chunk_size):
-                chunk = missing_album_track_ids[i : i + chunk_size]
-                try:
-                    fetched = client.tracks(chunk)
-                    for f_t in fetched:
-                        if f_t and f_t.albums and len(f_t.albums) > 0 and f_t.albums[0].id:
-                            f_alb = _clean_id(f_t.albums[0].id)
-                            if f_alb:
-                                recovered_albums[str(f_t.id)] = f_alb
-                except Exception:
-                    pass
+        recovered_albums = _recover_albums(client, missing_album_track_ids)
 
-        # 3. Собираем итоговый список треков, строго исключая треки без album_id
-        # (иначе Яндекс возвращает 'wrong-json' из-за пустого значения albumId)
         final_valid_items = list(items_with_album)
         for t_id in missing_album_track_ids:
             rec_alb = recovered_albums.get(t_id)
@@ -360,7 +344,7 @@ def find_track_id_by_meta(artist: str, title: str, token: Optional[str] = None) 
         if search_res and search_res.tracks and search_res.tracks.results:
             return str(search_res.tracks.results[0].id)
     except Exception as err:
-        print(f"⚠️ Ошибка поиска трека '{artist} - {title}': {err}", flush=True)
+        logger.warning("Ошибка поиска трека '%s - %s': %s", artist, title, err)
     return None
 
 
@@ -422,5 +406,5 @@ def get_track_stream_url(
             "bitrate_in_kbps": getattr(target, "bitrate_in_kbps", 192),
         }
     except Exception as err:
-        print(f"⚠️ Ошибка получения прямой ссылки на трек {track_id}: {err}", flush=True)
+        logger.warning("Ошибка получения прямой ссылки на трек %s: %s", track_id, err)
         return None

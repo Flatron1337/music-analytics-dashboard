@@ -1,3 +1,4 @@
+from itertools import combinations
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 import networkx as nx
@@ -145,10 +146,9 @@ def build_collaborations_graph(
 
         if len(artists) > 1:
             unique_in_track = sorted(list(dict.fromkeys(artists)))
-            for i in range(len(unique_in_track)):
-                for j in range(i + 1, len(unique_in_track)):
-                    pair = (unique_in_track[i], unique_in_track[j])
-                    collab_weights[pair] = collab_weights.get(pair, 0) + 1
+            for a1, a2 in combinations(unique_in_track, 2):
+                pair = (a1, a2)
+                collab_weights[pair] = collab_weights.get(pair, 0) + 1
 
     for (a1, a2), weight in collab_weights.items():
         if weight >= min_collaborations:
